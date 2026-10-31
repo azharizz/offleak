@@ -147,3 +147,21 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Python and local SafeIRL inputs/outputs
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
+playground/uploads/
+playground/videos/*
+!playground/videos/.gitkeep
+playground/fixtures/
+playground/models/*
+!playground/models/README.md
+playground/results/*
+!playground/results/reports/
+!playground/results/reports/*.md
+
+# Private local product research
+/PRODUCT_RESEARCH.md
