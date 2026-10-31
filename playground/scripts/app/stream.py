@@ -46,10 +46,10 @@ def sink(dst, w, h, fps):
                             stdin=subprocess.PIPE)
 
 
-def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='bytetrack.yaml', on_frame=None, stop=None, stats=None):
+def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='bytetrack.yaml', on_frame=None, stop=None, stats=None, retain_original=True):
     """Run the live redactor until the source ends or `stop` is set. on_frame(original, redacted, mask, keep_boxes)
     is called for every output frame; `stats` (a dict) is updated in place for dashboards. Returns the final report."""
-    probe = cv2.VideoCapture(int(source) if str(source).isdigit() else str(source))
+    probe = source if hasattr(source, 'read') else cv2.VideoCapture(int(source) if str(source).isdigit() else str(source))
     w, h, fps = int(probe.get(3)), int(probe.get(4)), fps or probe.get(cv2.CAP_PROP_FPS) or 30
     if not w or not h:
         raise SystemExit('cannot read source')
@@ -63,7 +63,7 @@ def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='byt
     q = queue.Queue()
     threading.Thread(target=reader, args=(probe, fps, realtime, q, stop), daemon=True).start()
     r = cd.Redactor(fps, w, h, delay=delay)
-    enc = sink(output, w, h, fps)
+    enc = sink(output, w, h, fps) if output else None
     pools = {k: ThreadPoolExecutor(1) for k in ('heads', 'objects')}
     jobs = {'heads': None, 'objects': None}
     runs = {'heads': 0, 'objects': 0}
@@ -80,11 +80,12 @@ def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='byt
     def drain(flush=False):
         while r.ready(flush):
             i, frame, m = r.emit()
-            enc.stdin.write(frame.tobytes())
+            if enc:
+                enc.stdin.write(frame.tobytes())
             now = time.perf_counter()
             latency.append((now - t_start, now - arrival.pop(i)))
             if on_frame:
-                on_frame(originals.pop(i), frame, m, r.last_keep)
+                on_frame(originals.pop(i) if retain_original else None, frame, m, r.last_keep)
             wall = max(1e-6, now - t_start)
             stats.update(frames=r.out, output_fps=round(r.out / wall, 1), latency_ms=round(latency[-1][1] * 1000),
                          head_det_per_s=round(runs['heads'] / wall, 1), object_det_per_s=round(runs['objects'] / wall, 1),
@@ -99,7 +100,7 @@ def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='byt
                 continue
             i = r.add(frame)
             arrival[i] = t_arr
-            if on_frame:
+            if on_frame and retain_original:
                 originals[i] = frame.copy()
             collect()
             if jobs['heads'] is None:
@@ -111,8 +112,9 @@ def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='byt
         drain(flush=True)
     finally:
         stop.set()
-        enc.stdin.close()
-        enc.wait()
+        if enc:
+            enc.stdin.close()
+            enc.wait()
     wall = time.perf_counter() - (t_start or time.perf_counter())
     lat = np.array([l for _, l in latency]) * 1000 if latency else np.zeros(1)
     by30 = {}
