@@ -3,7 +3,7 @@
 The local UI needs YuNet, SFace, YOLO11n and YOLO11n-pose weights. Download them from their upstream repositories with:
 
 ```sh
-sh playground/scripts/download_models.sh
+sh playground/scripts/setup/download_models.sh
 ```
 
 QRDet downloads its own model on first use. Internet access is needed for the initial model downloads. Historical experimental scripts may require additional models and are described in the reports.

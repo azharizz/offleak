@@ -27,9 +27,9 @@ QRDet's author says the YOLOv8 training and model use carry AGPL-3.0 obligations
 With the existing playground virtual environment, install `qrdet`, `quadrilateral-fitter`, `ultralytics`, and `lap`, in addition to the dependencies documented in EXPERIMENTS.md. Then run from the repository root:
 
 ```sh
-playground/.venv/bin/python playground/scripts/compare_qr.py
-playground/.venv/bin/python playground/scripts/yolo_qr.py playground/videos/qr.mp4 playground/results/rendered/qr-yolo.mp4
-playground/.venv/bin/python playground/scripts/compare_person.py
-playground/.venv/bin/python playground/scripts/compare_reacquire.py
-playground/.venv/bin/python playground/scripts/face_track_blur.py playground/videos/face.mp4 playground/results/data/person-reacquire-frames.json playground/results/rendered/face-track-blur.mp4
+playground/.venv/bin/python playground/trash/compare_qr.py
+playground/.venv/bin/python playground/trash/yolo_qr.py playground/videos/qr.mp4 playground/results/rendered/qr-yolo.mp4
+playground/.venv/bin/python playground/trash/compare_person.py
+playground/.venv/bin/python playground/trash/compare_reacquire.py
+playground/.venv/bin/python playground/trash/face_track_blur.py playground/videos/face.mp4 playground/results/data/person-reacquire-frames.json playground/results/rendered/face-track-blur.mp4
 ```

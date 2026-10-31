@@ -39,13 +39,13 @@ The dominant-face rule can leave a bystander visible when people overlap, when t
 Requirements and licensing noted in `COMPARISON.md`. The three collection commands can run separately. Do not run them concurrently for timing comparisons.
 
 ```sh
-playground/.venv/bin/python playground/scripts/collect_experiments.py qr
-playground/.venv/bin/python playground/scripts/collect_experiments.py phone
-playground/.venv/bin/python playground/scripts/collect_experiments.py face
-playground/.venv/bin/python playground/scripts/analyze_experiments.py
-playground/.venv/bin/python playground/scripts/face_association.py
-playground/.venv/bin/python playground/scripts/review_frames.py
-playground/.venv/bin/python playground/scripts/attack_checks.py
+playground/.venv/bin/python playground/trash/collect_experiments.py qr
+playground/.venv/bin/python playground/trash/collect_experiments.py phone
+playground/.venv/bin/python playground/trash/collect_experiments.py face
+playground/.venv/bin/python playground/trash/analyze_experiments.py
+playground/.venv/bin/python playground/trash/face_association.py
+playground/.venv/bin/python playground/trash/review_frames.py
+playground/.venv/bin/python playground/trash/attack_checks.py
 ```
 
 Current scripts rely on cached `person-reacquire-frames.json` from a prior automatic run; they are offline experiments, not a pipeline. For an actual product, retain detections and tracks in one synchronized pipeline, fail closed when uncertain or overloaded, and measure annotated frame-level leakage/identity switches and real capture-to-output latency on target hardware.

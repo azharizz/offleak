@@ -148,7 +148,7 @@ vite.config.ts.timestamp-*
 # Turbo Repo
 .turbo
 
-# Python and local SafeIRL inputs/outputs
+# Python and local Offleak inputs/outputs
 __pycache__/
 *.py[cod]
 .venv/

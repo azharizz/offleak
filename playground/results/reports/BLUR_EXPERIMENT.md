@@ -11,7 +11,7 @@ The face run took 248.53s for 620 frames, with other jobs running simultaneously
 Commands (requirements and models are in `EXPERIMENTS.md`):
 
 ```sh
-playground/.venv/bin/python playground/scripts/preview_blur.py playground/videos/qr.mp4 playground/results/rendered/qr-buffered.mp4 playground/results/rendered/qr-blur-preview.mp4
-playground/.venv/bin/python playground/scripts/qr_phone_blur.py playground/videos/phone.mp4 playground/results/rendered/phone-blur-fast.mp4 --mode phone
-playground/.venv/bin/python playground/scripts/auto_face_blur.py playground/videos/face.mp4 playground/results/rendered/face-auto-blur.mp4 --select 660,300
+playground/.venv/bin/python playground/trash/preview_blur.py playground/videos/qr.mp4 playground/results/rendered/qr-buffered.mp4 playground/results/rendered/qr-blur-preview.mp4
+playground/.venv/bin/python playground/trash/qr_phone_blur.py playground/videos/phone.mp4 playground/results/rendered/phone-blur-fast.mp4 --mode phone
+playground/.venv/bin/python playground/trash/auto_face_blur.py playground/videos/face.mp4 playground/results/rendered/face-auto-blur.mp4 --select 660,300
 ```

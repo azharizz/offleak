@@ -19,8 +19,8 @@ On the 620-frame clip, 223 face boxes were excluded and 1,146 were pixelated, wi
 Requires macOS Vision and an isolated environment with `opencv-contrib-python-headless==4.12.0.88`, numpy, `pyobjc-framework-Vision`, and `pyobjc-framework-Quartz`. The current `.venv` inherits the system's PyObjC packages. Model files are in `playground/models`. Output video has no audio.
 
 ```sh
-playground/.venv/bin/python playground/scripts/qr_tiles.py playground/videos/qr.mp4 playground/results/rendered/qr-tiles.mp4 --seconds 20 --duration 3
-playground/.venv/bin/python playground/scripts/subject_blur.py playground/videos/face.mp4 playground/results/rendered/face-selected.mp4 --subject 540,125,285,345
+playground/.venv/bin/python playground/trash/qr_tiles.py playground/videos/qr.mp4 playground/results/rendered/qr-tiles.mp4 --seconds 20 --duration 3
+playground/.venv/bin/python playground/trash/subject_blur.py playground/videos/face.mp4 playground/results/rendered/face-selected.mp4 --subject 540,125,285,345
 ```
 
 The subject box uses x,y,width,height in pixels in the input's first frame. Measurements are local offline processing, not capture-to-OBS or Twitch latency. Neither implementation guarantees privacy.

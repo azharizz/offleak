@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SafeIRL benchmark: randomized clips of combined.mp4 with synthetic ground truth, scored per transform.
+"""Offleak benchmark: randomized clips of combined.mp4 with synthetic ground truth, scored per transform.
 
 make: picks random 4s windows from the three source segments in random order, pastes a moving QR code and a
       phone number with known boxes, then applies per-clip mirror / 180 rotation / low-res / motion blur /
@@ -11,12 +11,14 @@ eval: runs the shared Redactor engine on the benchmark video and reports box cov
 import argparse
 import json
 import time
+import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 import combined_detector as cd
 
 SEGMENTS = [(0, 49), (49.3, 69.8), (70.2, 176)]  # qr / street / phone parts of videos/combined.mp4

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pick which people stay visible: scans a video, groups faces by identity, shows a numbered sheet, saves your picks.
 
-  python scripts/pick_faces.py my.mp4 --out fixtures/exclude-my        # opens the sheet, asks for numbers
-  python scripts/stream.py my.mp4 out.mp4 --realtime --preview --exclude fixtures/exclude-my/*.png
+  python scripts/app/pick_faces.py my.mp4 --out fixtures/exclude-my        # opens the sheet, asks for numbers
+  python scripts/app/stream.py my.mp4 out.mp4 --realtime --preview --exclude fixtures/exclude-my/*.png
 """
 import argparse
 import subprocess

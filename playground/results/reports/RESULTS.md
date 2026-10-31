@@ -19,7 +19,7 @@ This test runs only the corresponding detector for each video; it does not measu
 Reproduce from the repository root:
 
 ```sh
-python3 playground/scripts/test_video.py playground/videos/qr.mp4 --mode qr --output playground/results/rendered/qr.mp4
-python3 playground/scripts/test_video.py playground/videos/face.mp4 --mode face --output playground/results/rendered/face.mp4
-python3 playground/scripts/test_video.py playground/videos/phone.mp4 --mode phone --output playground/results/rendered/phone.mp4
+python3 playground/trash/test_video.py playground/videos/qr.mp4 --mode qr --output playground/results/rendered/qr.mp4
+python3 playground/trash/test_video.py playground/videos/face.mp4 --mode face --output playground/results/rendered/face.mp4
+python3 playground/trash/test_video.py playground/videos/phone.mp4 --mode phone --output playground/results/rendered/phone.mp4
 ```

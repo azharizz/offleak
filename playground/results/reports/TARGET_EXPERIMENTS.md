@@ -29,14 +29,14 @@ A 0.5s look-ahead requires at least 0.5 seconds before any model or encoding/net
 Existing venv requires PyObjC, OpenCV contrib, NumPy, QRDet/Ultralytics, and RapidOCR. Inputs and cached detection files are under `playground`.
 
 ```sh
-playground/.venv/bin/python playground/scripts/guarded_face.py
-playground/.venv/bin/python playground/scripts/qr_groundtruth_test.py
-playground/.venv/bin/python playground/scripts/qr_stress_test.py
-playground/.venv/bin/python playground/scripts/qr_small_scale_test.py
-playground/.venv/bin/python playground/scripts/phone_stress_test.py
-playground/.venv/bin/python playground/scripts/independent_phone_audit.py
-playground/.venv/bin/python playground/scripts/qr_upscaled.py
-playground/.venv/bin/python playground/scripts/phone_upscaled.py
+playground/.venv/bin/python playground/trash/guarded_face.py
+playground/.venv/bin/python playground/trash/qr_groundtruth_test.py
+playground/.venv/bin/python playground/trash/qr_stress_test.py
+playground/.venv/bin/python playground/trash/qr_small_scale_test.py
+playground/.venv/bin/python playground/trash/phone_stress_test.py
+playground/.venv/bin/python playground/trash/independent_phone_audit.py
+playground/.venv/bin/python playground/trash/qr_upscaled.py
+playground/.venv/bin/python playground/trash/phone_upscaled.py
 ```
 
 A production claim needs independently annotated diverse real video, per-frame and per-appearance recall, wrong-person exemption tests, scanner/OCR attack tests, identity-switch analysis, synchronized handling when detectors lag or fail, and live target-device latency/resource tests. Since any exposure may matter, fail closed rather than extrapolating a percentage from these examples.

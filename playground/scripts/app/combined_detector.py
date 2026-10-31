@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SafeIRL redactor core + offline CLI: blur QR codes, phone numbers and every head except whitelisted streamers.
+"""Offleak redactor core + offline CLI: blur QR codes, phone numbers and every head except whitelisted streamers.
 
 Detector  - pose heads + YuNet/SFace streamer votes; Apple Vision OCR with NSDataDetector phone spans and QR;
             screen/paper crops re-scanned at higher scale; auto-corrects mirrored and 180-degree-rotated input.
@@ -19,7 +19,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-BASE = Path(__file__).resolve().parent.parent
+BASE = Path(__file__).resolve().parents[2]
 M = BASE / 'models'
 MATCH, REJECT = .45, .25  # SFace cosine: streamers scored .55-.89, bystanders <=.30 on combined.mp4
 PHONE = re.compile(r'\+?\d[\d .()\-]{5,}\d')

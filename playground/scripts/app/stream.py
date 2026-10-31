@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SafeIRL live mode: redact a live stream with a fixed delay buffer.
+"""Offleak live mode: redact a live stream with a fixed delay buffer.
 
 Input: a file (paced at its fps with --realtime to imitate a camera), udp://, rtmp://, or a camera index.
 Detectors run in two background threads (heads; OCR/QR) on the newest frame whenever they are free, so their
@@ -8,7 +8,7 @@ a file, udp://host:port (mpegts) or rtmp://... (flv). Audio is not passed throug
 
 Try a real network hop locally:
   ffmpeg -re -i results/bench/bench.mp4 -c copy -f mpegts udp://127.0.0.1:5000      # "camera"
-  python scripts/stream.py udp://127.0.0.1:5000 results/bench/live.mp4               # redactor
+  python scripts/app/stream.py udp://127.0.0.1:5000 results/bench/live.mp4               # redactor
 """
 import argparse
 import json
@@ -140,7 +140,7 @@ def main():
     stop = threading.Event()
 
     def show(orig, red, m, keep):
-        cv2.imshow('SafeIRL  original | redacted  (q = stop)', np.hstack([cv2.resize(orig, (640, 360)), cv2.resize(red, (640, 360))]))
+        cv2.imshow('Offleak  original | redacted  (q = stop)', np.hstack([cv2.resize(orig, (640, 360)), cv2.resize(red, (640, 360))]))
         if cv2.waitKey(1) & 0xFF == ord('q'):
             stop.set()
     report = live(a.source, a.output, a.exclude, a.delay, a.realtime, a.fps, a.tracker, show if a.preview else None, stop)

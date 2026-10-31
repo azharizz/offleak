@@ -9,7 +9,7 @@ Full clips: `playground/results/playable/qr-buffered.mp4`, `playground/results/p
 Run from project root with the environment and models documented in EXPERIMENTS.md:
 
 ```sh
-playground/.venv/bin/python playground/scripts/buffered_video.py playground/videos/qr.mp4 playground/results/rendered/qr-buffered.mp4 --mode qr
-playground/.venv/bin/python playground/scripts/buffered_video.py playground/videos/phone.mp4 playground/results/rendered/phone-buffered.mp4 --mode phone
-playground/.venv/bin/python playground/scripts/buffered_video.py playground/videos/face.mp4 playground/results/rendered/face-buffered-v3.mp4 --mode face
+playground/.venv/bin/python playground/trash/buffered_video.py playground/videos/qr.mp4 playground/results/rendered/qr-buffered.mp4 --mode qr
+playground/.venv/bin/python playground/trash/buffered_video.py playground/videos/phone.mp4 playground/results/rendered/phone-buffered.mp4 --mode phone
+playground/.venv/bin/python playground/trash/buffered_video.py playground/videos/face.mp4 playground/results/rendered/face-buffered-v3.mp4 --mode face
 ```

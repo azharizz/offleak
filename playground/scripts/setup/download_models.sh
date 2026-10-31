@@ -1,7 +1,7 @@
 #!/bin/sh
-# Download the models used by the local SafeIRL demo; existing files are preserved.
+# Download the models used by the local Offleak demo; existing files are preserved.
 set -eu
-base=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+base=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 mkdir -p "$base/models"
 fetch() {
   target="$base/models/$1"

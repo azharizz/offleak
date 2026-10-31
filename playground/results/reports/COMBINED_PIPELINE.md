@@ -1,4 +1,4 @@
-# SafeIRL redaction pipeline (v3)
+# Offleak redaction pipeline (v3)
 
 This is an offline and live prototype for macOS. It blurs QR codes, phone numbers and every face except the streamers you whitelist. It is **not a certified privacy filter**: misses and identity switches remain possible, and audio is never redacted.
 
@@ -7,11 +7,11 @@ This is an offline and live prototype for macOS. It blurs QR codes, phone number
 | Goal | Command (from the repo root) |
 |---|---|
 | **Debug UI**: pick a video, click who stays visible, watch the live stream side by side | `playground/.venv/bin/python playground/scripts/ui.py`, then open http://127.0.0.1:8765 |
-| Pick streamer faces from any video (command line) | `playground/.venv/bin/python playground/scripts/pick_faces.py my.mp4 --out playground/fixtures/exclude-my` |
-| Live mode (file at camera speed, UDP, RTMP or camera) | `playground/.venv/bin/python playground/scripts/stream.py my.mp4 out.mp4 --realtime --preview --exclude playground/fixtures/exclude-my/keep-*.png` |
-| Offline best quality (every detector on every frame, audio copied) | `playground/.venv/bin/python playground/scripts/combined_detector.py in.mp4 out.mp4` |
-| Benchmark | `playground/.venv/bin/python playground/scripts/bench.py make`, then `bench.py eval --report r.json` |
-| Logic self-check | `playground/.venv/bin/python playground/scripts/test_combined_logic.py` |
+| Pick streamer faces from any video (command line) | `playground/.venv/bin/python playground/scripts/app/pick_faces.py my.mp4 --out playground/fixtures/exclude-my` |
+| Live mode (file at camera speed, UDP, RTMP or camera) | `playground/.venv/bin/python playground/scripts/app/stream.py my.mp4 out.mp4 --realtime --preview --exclude playground/fixtures/exclude-my/keep-*.png` |
+| Offline best quality (every detector on every frame, audio copied) | `playground/.venv/bin/python playground/scripts/app/combined_detector.py in.mp4 out.mp4` |
+| Benchmark | `playground/.venv/bin/python playground/scripts/benchmarks/bench.py make`, then `playground/.venv/bin/python playground/scripts/benchmarks/bench.py eval --report r.json` |
+| Logic self-check | `playground/.venv/bin/python playground/scripts/tests/test_combined_logic.py` |
 
 ## How it works
 

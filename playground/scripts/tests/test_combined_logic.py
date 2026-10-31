@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """Self-check for combined_detector logic: phone parsing, exemption votes, frontal gate, flips, flow carry."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
+
 import numpy as np
 import cv2
 from combined_detector import Redactor, exempt, flip, frontal, is_phone, phone_spans, rot90, unflip, unrot_box
