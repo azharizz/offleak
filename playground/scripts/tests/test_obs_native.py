@@ -30,7 +30,10 @@ for _ in range(100):
     time.sleep(.01)
 original = np.full((720, 1280, 3), 255, dtype=np.uint8)
 redacted = np.zeros_like(original)
+encode = obs.cv2.imencode
+obs.cv2.imencode = lambda *a, **k: (_ for _ in ()).throw(AssertionError('native-only frame encoded as JPEG'))
 obs.publish(original, redacted, None, None)
+obs.cv2.imencode = encode
 def receive(size):
     data = bytearray()
     while len(data) < size:
@@ -42,6 +45,25 @@ assert struct.unpack('!II', receive(8)) == (1280, 720)
 frame = receive(1280 * 720 * 4)
 assert frame[:4] == b'\x00\x00\x00\xff'
 assert frame[-4:] == b'\x00\x00\x00\xff'
+obs.video_clients = 1
+obs.publish(original, redacted, None, None)
+assert obs.latest is not None and obs.latest[:2] == b'\xff\xd8'
+obs.video_clients = 0
+with obs.app.test_request_context('/video'):
+    response = obs.video()
+    received = []
+    reader = threading.Thread(target=lambda: received.append(next(response.response)))
+    reader.start()
+    for _ in range(100):
+        if obs.video_clients:
+            break
+        time.sleep(.01)
+    assert obs.video_clients == 1
+    obs.publish(original, redacted, None, None)
+    reader.join(timeout=3)
+    assert received and b'Content-Type: image/jpeg' in received[0]
+    response.response.close()
+    assert obs.video_clients == 0
 client.close()
 os.unlink(path)
 print('native redacted-frame transport: ok')

@@ -383,7 +383,7 @@ def blur(frame, mask):
         h, w = mask.shape
         small = cv2.resize(frame, (w // 16, h // 16), interpolation=cv2.INTER_AREA)
         b = cv2.resize(cv2.GaussianBlur(small, (0, 0), 1.5), (w, h), interpolation=cv2.INTER_LINEAR)
-        frame[mask > 0] = b[mask > 0]
+        cv2.copyTo(b, mask, frame)
     return frame
 
 
@@ -393,9 +393,11 @@ class Redactor:
 
     def __init__(self, fps, w, h, delay=1.0, hold=.8, face_hold=.15, keep=1.):  # tuned for live rates (results/bench/tune)
         self.w, self.h = w, h
+        self.fps = fps
         self.D, self.hold, self.fhold, self.keep = round(delay * fps), round(hold * fps), round(face_hold * fps), round(keep * fps)
         self.flow = Flow(w, h)
         self.frames, self.disp, self.obj, self.head, self.events = {}, {}, {}, {}, {}
+        self.box_cache = {}
         self.n = self.out = 0
         self.late = 0  # detections that arrived after their frame was emitted
         self.failsafe = 0  # frames fully blurred because a detector had no result within 1s
@@ -422,20 +424,30 @@ class Redactor:
         return self.out < self.n and (flush or self.out <= self.n - 1 - self.D)
 
     def carry(self, b, j, i):
-        b = list(map(float, b))
-        for k in range(j + 1, i + 1):
-            b = move(b, self.disp[k], self.flow.pts, 1)
-        for k in range(j, i, -1):
-            b = move(b, self.disp[k], self.flow.pts, -1)
-        return [int(round(v)) for v in b]
+        key = (j, tuple(b))
+        cached = self.box_cache.get(key)
+        if cached and cached[0] == i:
+            return [int(round(v)) for v in cached[1]]
+        if cached and cached[0] == i - 1 and j < i:
+            box = move(cached[1], self.disp[i], self.flow.pts, 1)
+        else:
+            box = list(map(float, b))
+            for k in range(j + 1, i + 1):
+                box = move(box, self.disp[k], self.flow.pts, 1)
+            for k in range(j, i, -1):
+                box = move(box, self.disp[k], self.flow.pts, -1)
+        if j <= i:
+            self.box_cache[key] = (i, box)
+        return [int(round(v)) for v in box]
 
     def mask(self, i):
         obj, face = np.zeros((self.h, self.w), np.uint8), np.zeros((self.h, self.w), np.uint8)
         for j in range(max(0, i - self.hold), min(self.n, i + self.hold + 1)):
             for b in self.obj.get(j, ()):
                 fill(obj, self.carry(b, j, i), .15, 6)
-        keys = [j for j in range(max(0, i - 30), min(self.n, i + 31)) if j in self.head]
-        if not keys or not any(j in self.obj for j in range(max(0, i - 30), min(self.n, i + 31))):
+        window = round(self.fps)
+        keys = [j for j in range(max(0, i - window), min(self.n, i + window + 1)) if j in self.head]
+        if not keys or not any(j in self.obj for j in range(max(0, i - window), min(self.n, i + window + 1))):
             self.failsafe += 1  # a detector stalled: blur everything rather than show unchecked pixels
             return np.full((self.h, self.w), 255, np.uint8)
         if keys:
@@ -464,7 +476,8 @@ class Redactor:
         m = self.mask(i)
         frame = blur(self.frames.pop(i), m)
         self.out += 1
-        old = i - 45
+        old = i - max(round(1.5 * self.fps), self.hold + 1)
+        self.box_cache = {key: value for key, value in self.box_cache.items() if key[0] >= old}
         for d in (self.disp, self.obj, self.head):
             for k in [k for k in d if k < old]:
                 del d[k]

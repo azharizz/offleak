@@ -11,13 +11,29 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'playground/scripts'))
 sys.path.insert(0, str(ROOT / 'playground/scripts/app'))
 import obs
+import combined_detector as cd
+
+if os.environ.get('OFFLEAK_CACHE_TRACKING') == '1':
+    from cached_tracking import CachedRedactor
+    cd.Redactor = CachedRedactor
+
+if os.environ.get('OFFLEAK_NUMPY_BLUR') == '1':
+    def old_blur(frame, mask):
+        if mask.any():
+            h, w = mask.shape
+            small = cv2.resize(frame, (w // 16, h // 16), interpolation=cv2.INTER_AREA)
+            softened = cv2.resize(cv2.GaussianBlur(small, (0, 0), 1.5), (w, h), interpolation=cv2.INTER_LINEAR)
+            frame[mask > 0] = softened[mask > 0]
+        return frame
+    cd.blur = old_blur
 
 
 class ReplayCamera:
     width, height = 1280, 720
 
     def __init__(self, fps):
-        self.video = cv2.VideoCapture(str(ROOT / 'playground/.cache/rust-comparison/obs-input.mp4'))
+        path = os.environ.get('OFFLEAK_REPLAY_VIDEO', str(ROOT / 'playground/.cache/rust-comparison/obs-input.mp4'))
+        self.video = cv2.VideoCapture(path)
         if not self.video.isOpened():
             raise RuntimeError('Missing OBS input capture')
         self.fps = fps

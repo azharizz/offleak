@@ -100,7 +100,7 @@ def start():
         alert('Setup needed', 'Run Install Offleak.command first, then restart OBS.', ['OK'])
         return
     DATA.mkdir(mode=0o700, parents=True, exist_ok=True)
-    command = [sys.executable, '-u', str(WORKER), '--fps', '15', '--delay', '15']
+    command = [sys.executable, '-u', str(WORKER)]
     if photo:
         command += ['--exclude', str(photo)]
     with LOG.open('a') as log:
@@ -126,7 +126,7 @@ def main():
         photo = reference()
         photo_label = photo.name if photo else 'Everyone is blurred'
         status = 'Running' if pid and service_running() else 'Not running from this launcher'
-        choice = alert('Offleak', f'{status}\nPerson kept visible: {photo_label}\n\nStart OBS Virtual Camera before starting Offleak.\nSettings: 15-second delay, 15 FPS.\nPhoto changes take effect the next time Offleak starts.',
+        choice = alert('Offleak', f'{status}\nPerson kept visible: {photo_label}\n\nStart OBS Virtual Camera before starting Offleak.\nSettings: 15-second delay, 30 FPS target.\nPhoto changes take effect the next time Offleak starts.',
                        ['Stop Offleak' if pid else 'Start Offleak', 'Choose photo', 'More'])
         if choice == NSAlertFirstButtonReturn:
             if pid:

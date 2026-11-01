@@ -44,12 +44,36 @@ Offleak can read OBS Virtual Camera and provide a native OBS source called **Off
 
 The input scene contains unredacted video; broadcast the output scene only. The OBS source clears when Offleak stops, but detection can still miss sensitive content. If the Offleak collection already exists, the installer leaves it unchanged. The launcher will not take control of a separately started Offleak process.
 
+### Performance and privacy
+
+The OBS worker targets **30 FPS at 1280 × 720** with a **15-second lookahead buffer**. Video frames are output between detector runs: sparse optical flow and cached box positions carry detections between frames. Full-frame Apple Vision scanning and QR detection run alongside OCR on detected screen or document crops. Masked blur composition uses OpenCV; native-only output skips JPEG encoding. These optimizations are enabled by default; they do not guarantee a particular frame rate or detection accuracy.
+
+| Approach | Status |
+| --- | --- |
+| Sparse detection, optical flow and cached box tracking | Default |
+| Full-frame QR/OCR scans plus OCR on detected crops | Default on the macOS pipeline |
+| OpenCV masked blur; skip JPEG encoding when no browser client is connected | Default |
+| 15 FPS lower-load mode | Manual option: `--fps 15` |
+| Core ML model inference | Experimental; not the default worker |
+| GPU blur source/filter, paired-frame transport | Experimental, uninstalled; **not a protected production output** |
+| Adaptive detection and sampled-mask reuse | Experimental; not enabled |
+| Windows acceleration / full Windows pipeline | Not validated or available as a working default |
+
+For performance troubleshooting, open `http://127.0.0.1:8766/status` while the worker is running:
+
+- `frames` and `dropped` are cumulative counters. Compare their change over an interval to estimate output FPS and dropped frames; `output_fps` is a lifetime average that includes buffer startup.
+- `latency_ms` measures from Offleak's frame arrival to its redaction output. It excludes upstream capture, OBS display, streaming networks, and Twitch playback. The configured buffer is a lookahead in frames, so delay can grow when frames are dropped.
+- `head_det_per_s` and `object_det_per_s` are detector-run averages, not the video output FPS. `failsafe_frames` counts frames fully blurred when detection results are unavailable; `late` counts detector results arriving after their frame was output. These are cumulative since startup.
+- If output stutters or delay grows, run the manual worker with `--fps 15`. There is no automatic fallback or launcher setting for it yet. The 15-second buffer uses substantial memory, especially at 30 FPS.
+
+All video paths remain experimental: a face may be incorrectly excluded or blurred, and QR codes or phone numbers may be missed. Review the native output before streaming. A buffer and zero dropped frames do not prove privacy protection. The [optimization report](results/reports/optimization-round-2.md) records measurement conditions, benchmark limits, and incomplete GPU and Windows work.
+
 ### Native source
 
 For manual development, start OBS Virtual Camera with its output pinned to the input scene, then run:
 
 ```sh
-playground/.venv/bin/python playground/scripts/obs.py --fps 15 --delay 15
+playground/.venv/bin/python playground/scripts/obs.py
 ```
 
 In a separate output scene, add **Offleak Redacted Video**. The existing **Offleak Native Output** scene is already configured. Video is blank until the buffer fills and clears if the detector disconnects. Only one native source connection is supported. The plugin receives redacted video through a local user-only socket; it does not supply audio. Do not put the unredacted input scene in the broadcast output.
@@ -71,7 +95,7 @@ Restart OBS after installation. The build expects OBS in `/Applications/OBS.app`
    playground/.venv/bin/python playground/scripts/obs.py
    ```
 
-   To trade a longer delay for a steadier 15 fps on this machine, use `playground/.venv/bin/python playground/scripts/obs.py --fps 15 --delay 15`. The preview stays black while the buffer fills.
+   For a lower processing load, use `playground/.venv/bin/python playground/scripts/obs.py --fps 15`. The preview stays black while the buffer fills. Frame rate does not automatically fall back if the machine cannot keep up.
 
 3. In a separate OBS broadcast scene, add a Browser Source with URL `http://127.0.0.1:8766/` and set its width and height to match the video. Only put the Offleak Browser Source, not the original camera or the debug page, into the broadcast scene. Check that the displayed camera is the intended source.
 4. By default everyone is blurred. To keep selected people visible, provide one or more face images when starting Offleak:
@@ -80,7 +104,7 @@ Restart OBS after installation. The build expects OBS in `/Applications/OBS.app`
    playground/.venv/bin/python playground/scripts/obs.py --exclude /path/to/person.png
    ```
 
-The redactor defaults to 1.5 seconds of lookahead, plus capture and processing time. It requests the OBS camera's 60 fps mode and processes 1280×720 at `--fps` (default 30); `--delay` changes lookahead. See `http://127.0.0.1:8766/status` for processing statistics; latency there excludes capture and browser delays. Audio is not carried by this integration; configure any audio separately in OBS and account for video delay. If capture stops, the browser may retain the last redacted frame; watch the terminal for errors. Do not broadcast the original input scene.
+The OBS worker defaults to 15 seconds of lookahead, plus capture and processing time. It requests the OBS camera's 60 fps mode and processes 1280×720 at `--fps` (default 30); `--delay` changes lookahead. See `http://127.0.0.1:8766/status` for processing statistics; latency there excludes capture and browser delays. The longer buffer can use substantial memory, and 30 fps is a target, not a guarantee. Audio is not carried by this integration; configure any audio separately in OBS and account for video delay. If capture stops, the browser may retain the last redacted frame; watch the terminal for errors. Do not broadcast the original input scene.
 
 The current pipeline, its benchmark results and known gaps are described in [COMBINED_PIPELINE.md](results/reports/COMBINED_PIPELINE.md).
 

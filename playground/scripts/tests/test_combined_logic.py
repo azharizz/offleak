@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 
 import numpy as np
 import cv2
-from combined_detector import Redactor, exempt, flip, frontal, is_phone, phone_spans, rot90, unflip, unrot_box
+from combined_detector import Redactor, blur, exempt, flip, frontal, is_phone, phone_spans, rot90, unflip, unrot_box
 
 assert is_phone('+1 929-333-3622') and is_phone('(929) 333 3622') and is_phone('O812-3456-789')
 assert not is_phone('12:45') and not is_phone('Settings') and not is_phone('2026')
@@ -22,6 +22,16 @@ assert exempt(ev, -1, 0, 1, 2) and not exempt(ev, -1, 0, 0, 2)
 #            x  y   w    h   reye     leye     nose
 assert frontal(np.array([0, 0, 100, 100, 30, 40, 70, 40, 50, 60]))
 assert not frontal(np.array([0, 0, 100, 100, 40, 40, 54, 40, 70, 60]))  # profile: eyes close, nose outside
+
+# Masked composition must match the previous boolean-index implementation exactly.
+rng = np.random.default_rng(1)
+source = rng.integers(0, 256, (64, 96, 3), dtype=np.uint8)
+mask = rng.choice(np.array([0, 255], np.uint8), (64, 96))
+small = cv2.resize(source, (6, 4), interpolation=cv2.INTER_AREA)
+soft = cv2.resize(cv2.GaussianBlur(small, (0, 0), 1.5), (96, 64), interpolation=cv2.INTER_LINEAR)
+expected = source.copy()
+expected[mask > 0] = soft[mask > 0]
+assert np.array_equal(blur(source.copy(), mask), expected)
 
 img = np.arange(12, dtype=np.uint8).reshape(3, 4)
 for hf, vf in ((1, 0), (0, 1), (1, 1)):
@@ -48,4 +58,13 @@ for k in range(6):
     r.add(fr)
 fwd, back = r.carry([100, 80, 300, 280], 0, 5), r.carry([130, 80, 330, 280], 5, 0)
 assert abs(fwd[0] - 130) <= 3 and abs(back[0] - 100) <= 3, (fwd, back)
+
+# Detector freshness is one second at each configured frame rate.
+for fps in (15, 30, 60):
+    redactor = Redactor(fps, 64, 48, delay=0)
+    redactor.n = 4 * fps
+    redactor.head[0] = []
+    redactor.obj[0] = []
+    assert not redactor.mask(fps).any()
+    assert redactor.mask(fps + 1).all()
 print('ok')

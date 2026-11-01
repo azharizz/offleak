@@ -25,6 +25,7 @@ running = False
 stats = {}
 native_frame = None
 native_clients = 0
+video_clients = 0
 
 
 class OBSCamera:
@@ -64,14 +65,19 @@ class OBSCamera:
 
 def publish(_original, redacted, _mask, _keep):
     global latest, native_frame, sequence
-    ok, encoded = cv2.imencode('.jpg', redacted, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    if ok:
-        with condition:
-            latest = encoded.tobytes()
-            if native_clients:
-                native_frame = cv2.cvtColor(redacted, cv2.COLOR_BGR2BGRA).tobytes()
-            sequence += 1
-            condition.notify_all()
+    with condition:
+        need_video, need_native = video_clients > 0, native_clients > 0
+    encoded = None
+    if need_video:
+        ok, encoded = cv2.imencode('.jpg', redacted, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            encoded = None
+    frame = cv2.cvtColor(redacted, cv2.COLOR_BGR2BGRA).tobytes() if need_native else None
+    with condition:
+        latest = encoded.tobytes() if encoded is not None else None
+        native_frame = frame
+        sequence += 1
+        condition.notify_all()
 
 
 def native_server():
@@ -146,16 +152,23 @@ def page():
 @app.get('/video')
 def video():
     def frames():
-        seen = -1
-        while True:
+        global video_clients
+        with condition:
+            video_clients += 1
+            seen = sequence
+        try:
+            while True:
+                with condition:
+                    condition.wait_for(lambda: sequence != seen or not running, timeout=5)
+                    if not running:
+                        break
+                    if sequence == seen or latest is None:
+                        continue
+                    seen, frame = sequence, latest
+                yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame + b'\r\n'
+        finally:
             with condition:
-                condition.wait_for(lambda: sequence != seen or not running, timeout=5)
-                if not running:
-                    break
-                if sequence == seen or latest is None:
-                    continue
-                seen, frame = sequence, latest
-            yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame + b'\r\n'
+                video_clients -= 1
     return Response(frames(), mimetype='multipart/x-mixed-replace; boundary=frame',
                     headers={'Cache-Control': 'no-store'})
 
@@ -169,7 +182,7 @@ def main():
     global running
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fps', type=float, default=30, help='camera frames per second (default: 30)')
-    parser.add_argument('--delay', type=float, default=1.5, help='redaction lookahead in seconds (default: 1.5)')
+    parser.add_argument('--delay', type=float, default=15, help='redaction lookahead in seconds (default: 15)')
     parser.add_argument('--exclude', nargs='*', type=Path, default=[], help='face images of people to keep visible')
     parser.add_argument('--port', type=int, default=8766)
     args = parser.parse_args()
