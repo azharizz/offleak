@@ -80,9 +80,9 @@ def publish(_original, redacted, _mask, _keep):
         condition.notify_all()
 
 
-def native_server():
+def native_server(path=None):
     global native_clients
-    path = f'/tmp/offleak-{os.getuid()}.sock'
+    path = path or f'/tmp/offleak-{os.getuid()}.sock'
     if os.path.lexists(path):
         info = os.lstat(path)
         if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():

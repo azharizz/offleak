@@ -1,0 +1,6 @@
+{"memory": 1024, "iteration": 1, "elapsed_s": 87.13373433297966, "metadata": {"StatusCode": 200, "ExecutedVersion": "$LATEST"}}
+{"memory": 1024, "iteration": 2, "elapsed_s": 85.57444979099091, "metadata": {"StatusCode": 200, "ExecutedVersion": "$LATEST"}}
+{"memory": 2048, "iteration": 1, "elapsed_s": 23.32644395902753, "metadata": {"StatusCode": 200, "ExecutedVersion": "$LATEST"}}
+{"memory": 2048, "iteration": 2, "elapsed_s": 22.583972207969055, "metadata": {"StatusCode": 200, "ExecutedVersion": "$LATEST"}}
+{"memory": 3008, "iteration": 1, "elapsed_s": 30.140097541967407, "metadata": {"StatusCode": 200, "ExecutedVersion": "$LATEST"}}
+{"memory": 3008, "iteration": 2, "elapsed_s": 28.484303375007585, "metadata": {"StatusCode": 200, "ExecutedVersion": "$LATEST"}}
