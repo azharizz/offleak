@@ -8,6 +8,9 @@ from pathlib import Path
 import secrets
 import threading
 import time
+from urllib.parse import urlencode
+
+import twitch
 
 import cv2
 import numpy as np
@@ -24,6 +27,7 @@ app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
 TOKEN = None
 STATE = {'status': 'warming', 'error': None, 'started': 0}
 LOCK = threading.Lock()
+OAUTH = {}
 
 
 def load_settings():
@@ -149,13 +153,67 @@ def secure_headers(response):
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'no-referrer'
-    response.headers['Content-Security-Policy'] = "default-src 'none'; img-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+    response.headers['Content-Security-Policy'] = "default-src 'none'; img-src 'self' data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
     return response
 
 
 @app.get('/')
 def page():
     return Path(__file__).with_name('people_dock.html').read_text()
+
+
+@app.get('/logo.svg')
+def logo():
+    return Path(__file__).with_name('logo.svg').read_text(), 200, {'Content-Type': 'image/svg+xml'}
+
+
+@app.post('/twitch/start')
+def twitch_start():
+    authorize()
+    data = request.get_json(silent=True) or {}
+    client_id = data.get('client_id', '')
+    if not isinstance(client_id, str) or not client_id.isascii() or not client_id.isalnum() or len(client_id) > 100:
+        abort(400)
+    nonce = secrets.token_urlsafe(32)
+    with LOCK:
+        OAUTH.clear()
+        OAUTH.update(nonce=nonce, client_id=client_id, expires=time.time() + 300)
+    query = urlencode({'client_id': client_id, 'redirect_uri': 'http://localhost:8767/twitch/callback',
+                       'response_type': 'token', 'scope': 'user:read:chat', 'state': nonce})
+    return jsonify(url='https://id.twitch.tv/oauth2/authorize?' + query)
+
+
+@app.get('/twitch/callback')
+def twitch_callback():
+    return """<!doctype html><meta name=referrer content=no-referrer><p id=result>Connecting to Twitch…</p><script>
+const p=new URLSearchParams(location.hash.slice(1));history.replaceState(null,'',location.pathname);
+fetch('/twitch/finish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:p.get('access_token'),state:p.get('state')})}).then(r=>{document.getElementById('result').textContent=r.ok?'Connected. You can close this window.':'Connection failed or authorization was denied. Return to Offleak and try again.'}).catch(()=>{document.getElementById('result').textContent='Connection failed. Return to Offleak and try again.'});
+</script>"""
+
+
+@app.post('/twitch/finish')
+def twitch_finish():
+    data = request.get_json(silent=True) or {}
+    with LOCK:
+        pending = dict(OAUTH)
+        OAUTH.clear()
+    nonce, token = data.get('state'), data.get('token')
+    if not isinstance(nonce, str) or not isinstance(token, str) or not token or len(token) > 2048 or not pending or time.time() > pending['expires'] or not hmac.compare_digest(nonce, pending['nonce']):
+        abort(403)
+    try:
+        twitch.connect(token, pending['client_id'])
+    except Exception:
+        abort(400)
+    return jsonify(ok=True)
+
+
+@app.post('/twitch/disconnect')
+def twitch_disconnect():
+    authorize()
+    with LOCK:
+        OAUTH.clear()
+    twitch.disconnect()
+    return jsonify(ok=True)
 
 
 @app.get('/people')
@@ -189,6 +247,7 @@ def state():
               'worker_enabled': settings.get('worker_enabled', True),
               **{k + '_enabled': settings.get(k + '_enabled', True) for k in ('face', 'qr', 'phone')},
               'status': STATE['status'], 'error': STATE['error'], 'metrics': None,
+              'twitch': dict(twitch.state),
               'people_revision': hashlib.sha256(json.dumps(refs(settings)).encode()).hexdigest()}
     try:
         metrics = json.loads(STATUS_FILE.read_text())

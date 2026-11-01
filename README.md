@@ -39,6 +39,14 @@ The currently tested setup requires:
 
 The models and Python dependencies have their own licenses. In particular, Ultralytics and QRDet may impose AGPL-3.0 obligations; review [model and dependency licensing](playground/models/README.md) before distribution or commercial use.
 
+## Twitch status and moderator alerts (experimental)
+
+The direct OBS dock can display Twitch live status and warn if the local worker is stopped or a detection category is disabled. A broadcaster or moderator can type `!privacy` in Twitch chat to show a warning in the dock. The chat command itself is public; the resulting dock alert is local. Video and face references are not sent to Twitch by this feature.
+
+To prepare a connection, register an application in the [Twitch Developer Console](https://dev.twitch.tv/console/apps) with **`http://localhost:8767/twitch/callback`** as an OAuth redirect URL. In the dock, enter its client ID, choose **Connect Twitch**, and open the authorization link. The streamer must grant `user:read:chat`. Do not put a client secret in the app or dock. The access token remains in controller memory and must be authorized again after a restart or expiration. Install the dependencies in `playground/requirements.txt`, including `websocket-client`.
+
+Twitch connectivity and moderator commands have not yet been integration-tested with a real account. Twitch status can be delayed or unknown during a disconnect; protection must run before going live and must not depend on Twitch events. A running worker does not guarantee every sensitive item is detected. The dock polls status periodically, and an alert may be missed while disconnected.
+
 ## Try the direct OBS filter
 
 This path is intended for **local testing**, not a production stream. It attaches the Offleak filter to a source directly and does not need OBS Virtual Camera.
