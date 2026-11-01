@@ -313,7 +313,7 @@ static void render(void *data, gs_effect_t *unused)
     gs_texture_set_image(s->texture, valid ? s->frame : s->black, W * 4, false);
     ol_mutex_unlock(&s->lock);
     gs_effect_set_texture(gs_effect_get_param_by_name(s->effect, "image"), s->texture);
-    while (gs_effect_loop(s->effect, "Draw")) gs_draw_sprite(s->texture, 0, W, H);
+    while (gs_effect_loop(s->effect, "Draw")) gs_draw_sprite(s->texture, 0, width, height);
 }
 
 static struct obs_source_info filter = {.id = "offleak_direct_filter_experiment", .type = OBS_SOURCE_TYPE_FILTER,

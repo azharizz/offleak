@@ -21,6 +21,8 @@ Requires macOS (Apple Silicon), Python 3.11, FFmpeg, and OBS 33.0.1 for the OBS 
 | Benchmark | `.venv/bin/python tools/benchmark/bench.py make` (needs `data/videos/combined.mp4`), then `... bench.py eval --report r.json` |
 | Build the native OBS pieces | `native/build_source.sh` (Virtual Camera source), `native/build_direct_filter.sh` (direct filter); both need `OBS_SDK` and `SIMDE_INCLUDE` |
 
+The direct controller prints its private dock URL on startup. The URL contains a token that grants access to the dock; keep it and any logs containing it private. `?v=3` is an optional cache-busting parameter, not a credential, and is not needed.
+
 Ports, sockets and settings files are the same as the playground build (8765/8766/8767, `/tmp/offleak-*.sock`, `~/Library/Application Support/...`). Existing OBS setups and the native plugins therefore work unchanged. Only one build should run at a time.
 
 ## Frame rate (up to 60 fps)

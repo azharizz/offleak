@@ -243,4 +243,6 @@ def load_token():
 def run():
     global TOKEN
     TOKEN = load_token()
-    make_server('127.0.0.1', PORT_DOCK, app, threaded=True).serve_forever()
+    httpd = make_server('127.0.0.1', PORT_DOCK, app, threaded=True)
+    print(f'Offleak dock (private URL): http://127.0.0.1:{PORT_DOCK}/#{TOKEN}', flush=True)
+    httpd.serve_forever()

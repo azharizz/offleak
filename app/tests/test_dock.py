@@ -84,3 +84,42 @@ def test_launcher_preferences_and_pid_handling(tmp_path, monkeypatch):
     for content in ('not a pid', '1'):
         launcher.PID_FILE.write_text(content)
         assert launcher.worker_pid() is None
+
+
+def test_twitch_oauth_success_is_single_use(dock, monkeypatch):
+    client = dock[0]
+    calls = []
+    monkeypatch.setattr(server.MONITOR, 'connect', lambda token, client_id: calls.append((token, client_id)))
+    url = client.post('/twitch/start', headers=TOKEN, json={'client_id': 'abc'}).json['url']
+    state = parse_qs(urlparse(url).query)['state'][0]
+    assert client.post('/twitch/finish', json={'state': state, 'token': 'access'}).status_code == 200
+    assert calls == [('access', 'abc')]
+    assert client.post('/twitch/finish', json={'state': state, 'token': 'access'}).status_code == 403
+
+
+def test_twitch_reconnect_transfers_existing_subscriptions(monkeypatch):
+    import websocket
+    m = TwitchMonitor()
+    events = []
+    class Socket:
+        def __init__(self, name, messages):
+            self.name, self.messages = name, iter(messages)
+        def recv(self):
+            msg = next(self.messages)
+            events.append((self.name, msg['metadata']['message_type']))
+            if msg['metadata']['message_type'] == 'done':
+                m.disconnect()
+            return json.dumps(msg)
+        def close(self):
+            events.append((self.name, 'close'))
+    first = Socket('old', [{'metadata': {'message_type': 'session_reconnect'},
+                            'payload': {'session': {'reconnect_url': 'wss://eventsub.wss.twitch.tv/ws?session=123'}}}])
+    second = Socket('new', [{'metadata': {'message_type': 'session_welcome'}}, {'metadata': {'message_type': 'done'}}])
+    sockets = iter([first, second])
+    monkeypatch.setattr(websocket, 'create_connection', lambda url, timeout: next(sockets))
+    calls = []
+    monkeypatch.setattr(m, '_subscribe', lambda *args: calls.append('subscribe') or False)
+    m._run('token', 'client', '1', m._generation)
+    assert calls == ['subscribe']
+    assert events.index(('new', 'session_welcome')) < events.index(('old', 'close'))
+    assert ('new', 'done') in events

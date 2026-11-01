@@ -4,6 +4,7 @@ import threading
 import time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 EVENTSUB = 'wss://eventsub.wss.twitch.tv/ws'
 HELIX = 'https://api.twitch.tv/helix'
@@ -63,7 +64,7 @@ class TwitchMonitor:
 
     def _handle(self, message, user_id):
         kind = message.get('metadata', {}).get('message_type')
-        if kind in ('session_reconnect', 'revocation'):
+        if kind == 'revocation':
             raise ConnectionError('Twitch subscription interrupted')
         if kind != 'notification':
             return
@@ -86,7 +87,26 @@ class TwitchMonitor:
                 self.state.update(connection='connected', live=live)
                 validated = time.monotonic()
                 while self._current(generation):
-                    self._handle(json.loads(ws.recv()), user_id)
+                    message = json.loads(ws.recv())
+                    if not self._current(generation):
+                        break
+                    if message.get('metadata', {}).get('message_type') == 'session_reconnect':
+                        url = message['payload']['session']['reconnect_url']
+                        parsed = urlsplit(url)
+                        if parsed.scheme != 'wss' or parsed.hostname != 'eventsub.wss.twitch.tv' or parsed.username or parsed.password or parsed.port not in (None, 443):
+                            raise ValueError('invalid Twitch reconnect URL')
+                        replacement = websocket.create_connection(url, timeout=20)
+                        try:
+                            welcome = json.loads(replacement.recv())
+                            if welcome.get('metadata', {}).get('message_type') != 'session_welcome':
+                                raise ValueError('invalid Twitch reconnect welcome')
+                        except BaseException:
+                            replacement.close()
+                            raise
+                        ws.close()
+                        ws = replacement
+                    else:
+                        self._handle(message, user_id)
                     if time.monotonic() - validated > 3600:  # Twitch requires hourly token validation
                         api(VALIDATE, token)
                         validated = time.monotonic()

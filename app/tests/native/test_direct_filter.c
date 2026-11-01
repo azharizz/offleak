@@ -5,8 +5,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define W 1280
-#define H 720
+#define W 1920
+#define H 1080
 static const char *synthetic_name(void *p) { UNUSED_PARAMETER(p); return "synthetic"; }
 static void *synthetic_create(obs_data_t *settings, obs_source_t *source)
 {
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
             gs_stage_texture(stage,gs_texrender_get_texture(target));
             uint8_t *pixels=NULL; uint32_t stride=0;
             if (gs_stagesurface_map(stage,&pixels,&stride)) {
-                if (n==0 || n==60 || n==119 || (count > 120 && n % 60 == 0)) { size_t i=(size_t)360*stride+640*4; printf("sample %d %u %u %u %u\n",n,pixels[i],pixels[i+1],pixels[i+2],pixels[i+3]); fflush(stdout); }
+                if (n==0 || n==60 || n==119 || (count > 120 && n % 60 == 0)) { size_t i=(size_t)(H - 100)*stride+(W - 100)*4; printf("sample %d %u %u %u %u\n",n,pixels[i],pixels[i+1],pixels[i+2],pixels[i+3]); fflush(stdout); }
                 gs_stagesurface_unmap(stage);
             }
         }
