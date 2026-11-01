@@ -177,3 +177,9 @@ app/data/
 app/.build/
 app/dist/
 app/.deepeval/
+
+# Local tooling and raw demo media
+.serena/
+video/
+/Screenshot *.png
+/footage.mp4

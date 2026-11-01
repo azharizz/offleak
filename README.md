@@ -1,201 +1,286 @@
-# Offleak
+<p align="center">
+  <img src="submission/assets/offleak-banner.png" alt="Offleak: Live on. Leak off. A real-time privacy filter for IRL streams" width="100%">
+</p>
 
-**Live on. Leak off.**
+<div align="center">
+  <h1>OFFLEAK</h1>
+  <p><strong>A real-time privacy filter for IRL streams. It lives inside OBS, blurs strangers' faces, QR codes and phone numbers before your viewers see them, and keeps your crew visible.</strong></p>
+  <p><em>A leak only needs one frame. Offleak checks every one, on your own machine, before it goes out.</em></p>
+  <p>
+    <a href="submission/submission-description.md"><img src="https://img.shields.io/badge/SUBMISSION%20DESCRIPTION-8CE6D1?style=for-the-badge&logoColor=0A0E18" alt="Read the submission description"></a>
+    <a href="https://twitchcon-codex.devpost.com/"><img src="https://img.shields.io/badge/CODEX%20x%20TWITCHCON%20HACKATHON-9146FF?style=for-the-badge&logo=twitch&logoColor=white" alt="Codex x TwitchCon Hackathon"></a>
+    <a href="https://dwzbpgm35mwo5.cloudfront.net"><img src="https://img.shields.io/badge/DOWNLOAD-E8ECF6?style=for-the-badge&labelColor=0A0E18&color=E8ECF6" alt="Download Offleak"></a>
+  </p>
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-8CE6D1.svg" alt="AGPL-3.0 license"></a>
+    <img src="https://img.shields.io/badge/version-0.1.0-A9C9FF.svg" alt="Version 0.1.0">
+    <img src="https://img.shields.io/badge/OBS%20Studio-33-302E31.svg?logo=obsstudio&logoColor=white" alt="OBS Studio 33">
+    <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-111111.svg?logo=apple&logoColor=white" alt="macOS Apple Silicon">
+    <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4.svg" alt="Windows 10 and 11">
+    <img src="https://img.shields.io/badge/Python-3.11-3776AB.svg?logo=python&logoColor=white" alt="Python 3.11">
+    <img src="https://img.shields.io/badge/OBS%20plugin-C-A8B9CC.svg" alt="OBS plugin in C">
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/Twitch-EventSub%20%C2%B7%20!privacy-9146FF.svg?logo=twitch&logoColor=white" alt="Twitch EventSub and !privacy">
+    <img src="https://img.shields.io/badge/faces-YuNet%20%C2%B7%20SFace%20%C2%B7%20Apple%20Vision-A9C9FF.svg" alt="YuNet, SFace, Apple Vision">
+    <img src="https://img.shields.io/badge/text-Apple%20Vision%20%C2%B7%20RapidOCR-B7A6FF.svg" alt="Apple Vision and RapidOCR">
+    <img src="https://img.shields.io/badge/GPU-CUDA%20%C2%B7%20MPS%20%C2%B7%20DirectML-76B900.svg" alt="CUDA, MPS, DirectML">
+    <img src="https://img.shields.io/badge/built%20with-Codex-0A0E18.svg" alt="Built with Codex">
+  </p>
+  <p>
+    <a href="submission/submission-description.md">Submission</a> ·
+    <a href="submission/assets/film-hero.gif">One frame</a> ·
+    <a href="submission/assets/offleak-architecture.gif">Architecture</a> ·
+    <a href="app/README.md">App internals</a> ·
+    <a href="playground/README.md">Playground</a>
+  </p>
+  <p><sub>Camera → Offleak filter → detect faces · QR codes · phone numbers → keep your crew → lookahead buffer → stream</sub></p>
+</div>
 
-Offleak is an experimental, locally run privacy tool for video creators. It explores how to detect and blur bystanders, QR codes, and phone numbers in video while keeping selected people visible. The project includes a direct OBS filter prototype, a local OBS setup dock, a Virtual Camera integration, and a playground for reviewing experiments.
+> [!IMPORTANT]
+> Offleak runs entirely on your computer: camera frames and face references never leave it. It is a strong safety net, not a guarantee. Detection can miss a face, a QR code or a very small number, so review your output before relying on it live. Audio is never redacted.
 
-> **Experimental software, not a privacy guarantee.** Faces can be missed or matched to the wrong person; QR codes and phone numbers can remain visible. Do not rely on Offleak to protect sensitive information in a live broadcast. Test with dummy information and review the output first.
+<details>
+<summary><kbd>Contents</kbd></summary>
+
+- [At a glance](#-at-a-glance)
+- [The problem](#the-problem)
+- [One frame, protected](#one-frame-protected)
+- [See it work](#see-it-work)
+- [What Offleak does](#what-offleak-does)
+- [On Twitch](#on-twitch)
+- [How it works](#how-it-works)
+- [Install](#-install)
+- [Set up in OBS](#set-up-in-obs)
+- [Run from source](#run-from-source)
+- [Verify](#verify)
+- [Results](#results)
+- [Built with Codex](#built-with-codex)
+- [Honest limits](#honest-limits)
+- [Repository map](#repository-map)
+- [License and attribution](#license-and-attribution)
+
+</details>
+
+## 🛡 At a glance
+
+<table>
+  <tr>
+    <td width="25%" align="center"><strong>01 / SEE</strong><br><br>Every camera frame goes through the Offleak filter in OBS before anything else.</td>
+    <td width="25%" align="center"><strong>02 / DETECT</strong><br><br>Faces, QR codes and phone numbers, in parallel, on your own GPU or CPU.</td>
+    <td width="25%" align="center"><strong>03 / DECIDE</strong><br><br>Your crew stays visible. Strangers, codes and numbers get pixelated. Unsure? The whole frame blurs.</td>
+    <td width="25%" align="center"><strong>04 / STREAM</strong><br><br>Only protected frames reach OBS output, Twitch and your recording.</td>
+  </tr>
+</table>
+
+## The problem
+
+IRL streams pull strangers into frame, and screens, tickets and QR codes slip in with them. One frame is enough: IShowSpeed flashed KSI's number to a live audience, RaKai was banned after leaking an NBA star's number, and fans swarmed Kai Cenat and Speed after an address leaked on stream. Sources are listed in the [submission description](submission/submission-description.md#inspiration).
+
+<p align="center">
+  <img src="submission/assets/film-leaks.gif" alt="Real headlines about streamers leaking phone numbers and addresses fly in, each stamped LEAKED" width="80%">
+</p>
+
+> Live, there's no undo. Can every frame be checked before it goes out, without the streamer changing how they stream?
+
+## One frame, protected
+
+<p align="center">
+  <img src="submission/assets/film-hero.gif" alt="A live street stream freezes on one frame; a face, a phone number and a QR code are spotted, and the frame is clipped and shared thousands of times" width="100%">
+</p>
+
+<p align="center">
+  <img src="submission/assets/film-finale.gif" alt="The same street, protected: a scan line pixelates every face, the number and the QR code" width="80%">
+</p>
+
+## See it work
+
+Three tests from the real OBS recording (crops of the OBS preview output):
+
+| Result 01 · Screens | Result 02 · Crowd | Result 03 · Known vs. stranger |
+| --- | --- | --- |
+| ![Phone numbers and QR codes on a screen are masked](submission/assets/demo-screen-masked.gif) | ![A crowd on a screen behind the streamer is blurred](submission/assets/demo-crowd-blurred.gif) | ![An added person stays visible while the stranger beside him is blurred](submission/assets/demo-known-visible.gif) |
+| Numbers and QR codes: **masked**. | Every face in the crowd: **blurred**. | Added person **visible**, stranger **blurred**. |
+
+<table>
+  <tr>
+    <td width="50%"><img src="submission/assets/film-install.gif" alt="Download for macOS, open the DMG, macOS and Windows installers"><br><sub><strong>Install.</strong> One installer for macOS or Windows sets up everything, including the OBS filter.</sub></td>
+    <td width="50%"><img src="submission/assets/film-setup.gif" alt="Copy the dock link, paste it into Custom Browser Docks, add the Offleak filter"><br><sub><strong>Set up.</strong> Copy the dock link, dock it in OBS, add the filter to your camera.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="submission/assets/demo-add-people.gif" alt="Real dock recording: Add people from webcam"><br><sub><strong>Keep your people.</strong> One click on <em>Add people from webcam</em> (real recording).</sub></td>
+    <td width="50%"><img src="submission/assets/film-twitch.gif" alt="Twitch channel goes live, a moderator types !privacy and the alert lands in the dock"><br><sub><strong>On Twitch.</strong> Live status and moderator <code>!privacy</code> alerts in your dock.</sub></td>
+  </tr>
+</table>
+
+| The website | Copy the dock link | Custom Browser Docks |
+| --- | --- | --- |
+| ![Offleak website hero](submission/screenshots/website-hero.jpg) | ![Terminal printing the private dock URL](submission/screenshots/terminal-dock-link.jpg) | ![OBS Custom Browser Docks](submission/screenshots/obs-custom-browser-dock.jpg) |
+
+| Add the filter | Filter properties | The Offleak dock |
+| --- | --- | --- |
+| ![OBS filter list with the Offleak filter](submission/screenshots/obs-add-filter.jpg) | ![Offleak filter properties](submission/screenshots/obs-filter-properties.jpg) | ![Offleak dock](submission/screenshots/offleak-dock.jpg) |
 
 ## What Offleak does
 
-- **Faces:** detects people and blurs faces or head regions, with reference photos for people who should remain visible.
-- **QR codes and phone numbers:** looks for QR codes, screens, documents, and text that may contain phone numbers, then applies blur to detected regions.
-- **People setup:** add reference images or capture from a webcam. The OBS dock shows face cards and can separate supported group photos into individual references.
-- **OBS controls:** change the FPS target and lookahead buffer, view worker status and measurements, and independently enable or disable each detection category.
-- **Local processing:** the detector, face references, and OBS video path run on the user's computer. The dock is served over a local loopback connection; AWS Lambda is not used for live inference.
+| | Capability | What the streamer gets | How it is built |
+| --- | --- | --- | --- |
+| 🙈 | **Strangers blurred** | Every face that isn't on your list is pixelated. | Pose-based head finding + YuNet / Apple Vision faces, tracked between detections with sparse optical flow. |
+| 🤝 | **Your crew visible** | Add people from the webcam or a photo; they stay clear. | SFace embeddings in a local face gallery with identity votes; group photos split into separate cards. |
+| 🔳 | **QR codes masked** | Tickets, boarding passes and screens with QR codes are covered. | QR detector model + Apple Vision barcodes (macOS) or OpenCV (Windows), with rotation and mirror probes. |
+| ☎️ | **Phone numbers masked** | Numbers on phones, screens and paper are covered. | Apple Vision OCR (macOS) or RapidOCR (Windows), screen-crop zoom re-reads, phone-number rules. |
+| ⏱ | **Checked before it streams** | Each output frame is checked first; unsure means blur everything. | Lookahead buffer, flow-carried boxes, 1-second fail-closed rule. |
+| 🎛 | **Lives in OBS** | A filter on your camera and a dock for people, switches, fps (5–60) and status. | Native C OBS filter + Flask dock on `127.0.0.1:8767` behind a private token. |
+| 📺 | **Talks to Twitch** | Live status and moderator `!privacy` alerts in the dock. | Twitch EventSub over WebSocket: `stream.online`, `channel.chat.message`. |
 
-All three detection categories are enabled by default. Disabling a category means it is **not protected**. Disabling phone detection skips OCR, disabling QR detection skips QR-specific inference, and disabling face detection skips the pose detector. Screen detection is shared by the QR and phone paths. Resource savings depend on the video and machine and have not been established for every configuration.
+## On Twitch
 
-## Current status
-
-| Component | Status |
+| Twitch event | What Offleak does |
 | --- | --- |
-| Direct OBS source filter and setup dock | **Experimental.** Tested locally with OBS 33.0.1 on an Apple Silicon Mac and a webcam. Manual installation; see below. |
-| Virtual Camera → Offleak → OBS source | Experimental fallback. The existing macOS installer sets up this path. |
-| Face, QR, and phone detection | Working prototypes; detection accuracy and identity matching are not guaranteed. |
-| Windows and Linux | Not packaged or validated for the full pipeline. The current detector uses Apple Vision and other macOS-specific components. |
-| 60 FPS | An experimental target, not a demonstrated guarantee of 60 distinct camera or protected output frames per second. |
+| **Connect Twitch** | OAuth from the dock with only the `user:read:chat` scope. No client secret in the app; the access token stays in controller memory. |
+| **`stream.online` / `stream.offline`** | The dock shows **Live on Twitch**. |
+| **`channel.chat.message`** | When the broadcaster or a moderator types exactly `!privacy`, a privacy flag appears in the dock. The chat message itself is public; the alert is local. |
 
-The direct filter has been installed and tested on the development Mac, but it is **not included in the existing one-click installer**. The installer and `Start Offleak.command` configure the older Virtual Camera path; `Start Offleak Direct.command` starts the controller for the separate direct-filter prototype.
+To connect, register an app in the [Twitch Developer Console](https://dev.twitch.tv/console/apps) with `http://localhost:8767/twitch/callback` as the OAuth redirect URL, enter its client ID in the dock, and choose **Connect Twitch**. Protection never depends on Twitch being connected.
 
-## Requirements
+## How it works
 
-The currently tested setup requires:
-
-- An Apple Silicon Mac and OBS Studio **33.0.1** installed at `/Applications/OBS.app`.
-- Python 3.11, FFmpeg, Git, and Apple Command Line Tools. The installer can use Homebrew to install missing Python and FFmpeg dependencies.
-- Internet access for the initial dependency and model downloads. Models and personal media are not included in this repository.
-- For the direct filter build: OBS 33.0.1 source headers and [SIMDe](https://github.com/simd-everywhere/simde) headers. The OBS app must be restarted after the plugin is installed.
-
-The models and Python dependencies have their own licenses. In particular, Ultralytics and QRDet may impose AGPL-3.0 obligations; review [model and dependency licensing](playground/models/README.md) before distribution or commercial use.
-
-## Twitch status and moderator alerts (experimental)
-
-The direct OBS dock can display Twitch live status and warn if the local worker is stopped or a detection category is disabled. A broadcaster or moderator can type `!privacy` in Twitch chat to show a warning in the dock. The chat command itself is public; the resulting dock alert is local. Video and face references are not sent to Twitch by this feature.
-
-To prepare a connection, register an application in the [Twitch Developer Console](https://dev.twitch.tv/console/apps) with **`http://localhost:8767/twitch/callback`** as an OAuth redirect URL. In the dock, enter its client ID, choose **Connect Twitch**, and open the authorization link. The streamer must grant `user:read:chat`. Do not put a client secret in the app or dock. The access token remains in controller memory and must be authorized again after a restart or expiration. Install the dependencies in `playground/requirements.txt`, including `websocket-client`.
-
-Twitch connectivity and moderator commands have not yet been integration-tested with a real account. Twitch status can be delayed or unknown during a disconnect; protection must run before going live and must not depend on Twitch events. A running worker does not guarantee every sensitive item is detected. The dock polls status periodically, and an alert may be missed while disconnected.
-
-## Try the direct OBS filter
-
-This path is intended for **local testing**, not a production stream. It attaches the Offleak filter to a source directly and does not need OBS Virtual Camera.
-
-### 1. Prepare the local environment
-
-Double-click **Install Offleak.command** from the project folder. It creates the Python environment, downloads dependencies and models, and sets up the separate Virtual Camera integration. It does **not** install the direct filter or its dock.
-
-### 2. Build and install the experimental filter
-
-From the project root, obtain the matching OBS source and SIMDe headers, then build the direct filter:
-
-```sh
-mkdir -p playground/.cache/direct-deps
-git clone --depth 1 --branch 33.0.1 --filter=blob:none --sparse https://github.com/obsproject/obs-studio.git playground/.cache/direct-deps/obs-studio
-git -C playground/.cache/direct-deps/obs-studio sparse-checkout set libobs
-git clone --depth 1 https://github.com/simd-everywhere/simde.git playground/.cache/direct-deps/simde
-OBS_SDK="$PWD/playground/.cache/direct-deps/obs-studio" \
-SIMDE_INCLUDE="$PWD/playground/.cache/direct-deps/simde" \
-sh playground/obs-plugin/build-direct-experiment.sh
-```
-
-Install the built module in the current user's OBS plugin directory:
-
-```sh
-PLUGIN_DIR="$HOME/Library/Application Support/obs-studio/plugins/offleak-direct.plugin"
-mkdir -p "$PLUGIN_DIR/Contents/MacOS"
-cp playground/.cache/direct-filter/offleak-direct-normal.so "$PLUGIN_DIR/Contents/MacOS/offleak-direct"
-python3 - <<'PY'
-import plistlib
-from pathlib import Path
-path = Path.home() / 'Library/Application Support/obs-studio/plugins/offleak-direct.plugin/Contents/Info.plist'
-path.write_bytes(plistlib.dumps({
-    'CFBundleExecutable': 'offleak-direct',
-    'CFBundleIdentifier': 'com.offleak.obs.direct-experiment',
-    'CFBundleName': 'Offleak Direct Experiment',
-    'CFBundlePackageType': 'BNDL',
-    'CFBundleVersion': '1',
-}))
-PY
-codesign --force --sign - "$PLUGIN_DIR"
-```
-
-Restart OBS so it loads the plugin. This build process is specific to the tested macOS setup; it is not a cross-platform installer.
-
-### 3. Start Offleak and add the filter
-
-1. Double-click **Start Offleak Direct.command** and leave its window running. Alternatively, from the project root run `playground/.venv/bin/python playground/obs-plugin/direct_controller.py`.
-2. In OBS, create a test scene and add a **Video Capture Device** or another supported video source.
-3. Select the source, open **Filters**, and add **Offleak direct filter (experimental)** under Effect Filters.
-4. The preview stays black during startup, while the worker reloads, or when the filter's worker connection is stale or lost. Allow time for model loading and the lookahead buffer.
-
-The direct prototype currently processes one connection at 1280 × 720. It sends frames between OBS and a local Python worker; it is not a zero-copy or GPU-blur implementation. Audio is not processed or delayed by this filter.
-
-### 4. Add the setup dock
-
-In OBS, open **Docks → Custom Browser Docks…**. Give the dock a name such as **Offleak**, then paste the local URL printed by this command, run from the project root while the controller is running:
-
-```sh
-playground/.venv/bin/python - <<'PY'
-from pathlib import Path
-p = Path.home() / 'Library/Application Support/obs-studio/plugin_config/offleak-direct/dock-token'
-print('http://127.0.0.1:8767/#' + p.read_text().strip())
-PY
-```
-
-Click **Apply**. Keep the URL private: its token grants access to the local dock's reference images and controls. The dock and controller listen locally, and the token stays in the user's OBS configuration.
-
-In the dock you can:
-
-1. Add a reference with **Choose photo** or **Add people from webcam**.
-2. Review the individual face cards and remove a reference if needed. The dock attempts to split group photos into separately removable face crops; if it cannot safely separate a photo, it leaves it as one reference and asks for review.
-3. Adjust face, QR, and phone switches, the FPS target, or the lookahead buffer. Settings are shared with the filter; reopen its properties to see changes made in the dock.
-4. Watch worker status, processed frames per second, worker delay, and dropped-frame counts. These figures are not a measure of unique camera frames or end-to-end stream latency.
-
-Reference captures, imported copies, and generated face crops are stored locally. A webcam capture stores the **full frame**. Removing a card stops using its reference but does not delete the original or generated files. Multiple photos of the same person are separate references; removing one does not remove the others. Face detection can miss people in a group photo, and matching can confuse people.
-
-## Virtual Camera fallback
-
-For the existing installer-supported setup:
-
-1. Run **Install Offleak.command** and restart OBS if needed.
-2. In OBS, choose **Scene Collection → Offleak**. Add the camera or capture source to **Offleak Input** and start OBS Virtual Camera with its output pinned to that input scene.
-3. Run **Start Offleak.command** and use its launcher to start processing and choose an optional face reference.
-4. View **Offleak Output**, which contains the **Offleak Redacted Video** source. The output is blank while the buffer fills.
-
-The input scene contains unredacted video. Keep it separate from the output scene and configure audio and audio delay separately. For manual commands and the browser-source fallback, see the [playground guide](playground/README.md#obs-integration-experimental).
-
-## How the pipeline works
+<p align="center">
+  <img src="submission/assets/offleak-architecture.gif" alt="Animated architecture: camera, Offleak filter, local worker with face, QR and phone lanes, redactor, OBS output, Twitch; dock and EventSub alerts" width="100%">
+</p>
 
 ```mermaid
 flowchart LR
-    A[OBS camera or video source] --> B[Direct filter or Virtual Camera input]
-    B --> C[Local buffered frames]
-    C --> D[Face and pose detection]
-    C --> E[QR and phone detection]
-    D --> F[Track regions between detection runs]
-    E --> F
-    F --> G[Apply blur to buffered video]
-    G --> H[OBS output]
-    I[Local face references] --> D
-    J[Offleak dock] --> D
+    A[OBS camera source] --> B[Offleak direct filter<br/>OBS plugin, C]
+    B -- Unix socket / token TCP --> C[Local worker]
+    C --> D[Faces<br/>pose + YuNet / Apple Vision + SFace]
+    C --> E[QR codes<br/>QRDet + Vision / OpenCV]
+    C --> F[Phone numbers<br/>Vision OCR / RapidOCR + rules]
+    D --> G[Redactor<br/>lookahead buffer, optical flow,<br/>fail-closed]
+    E --> G
+    F --> G
+    G --> B
+    B --> H[OBS output → Twitch / recording]
+    I[Offleak dock<br/>127.0.0.1:8767] <--> C
+    J[Twitch EventSub] --> I
 ```
 
-The current macOS pipeline combines pose and face detection, local face matching, Apple Vision barcode and text recognition, QR-specific detection, screen/document crops, and sparse optical-flow tracking. It uses delayed frames so later detections can inform earlier frames. The worker produces redacted frames; the direct OBS filter receives and displays them. The original input and local reference photos remain on the machine during normal operation, but the OBS output can of course be recorded or streamed by the user.
+<p align="center">
+  <img src="submission/assets/film-pipeline.gif" alt="Frames flow through Offleak, are checked, wait in the lookahead buffer and go to the stream; an unsure frame is blurred whole" width="90%">
+</p>
 
-The buffer is configured using a frame count derived from the FPS target. **Actual delay can exceed the setting** when the input rate or processing throughput differs from that target. A longer buffer can help cover detector latency; it does not increase processing speed or guarantee that a newly appearing object will be detected. Changes to settings restart the worker, and the direct preview can go black while it reloads.
+- **Every output frame is blurred where needed.** Detectors run as often as the machine allows on the newest frame; optical flow carries each box onto every frame in between, so a higher fps never skips protection.
+- **Fail closed.** If a detector stalls for more than a second, or a pass fails, the whole frame is blurred.
+- **Hardware:** GPU order is CUDA → Apple MPS → CPU; on Windows, text reading uses DirectML on any GPU.
+- **Memory:** the lookahead holds `delay × fps` frames (1280×720, about 2.8 MB each); 5 s at 60 fps is about 0.8 GB.
 
-## Performance observations
+## ⚡ Install
 
-On one Apple M1 Pro webcam test, with OBS set to 60 FPS, a 60 FPS processing target, and a 5-second configured lookahead, the direct-filter worker reported approximately **44–51 processed frames/s** and **5.9–6.8 seconds of worker-measured delay** in sampled intervals. These counts can include repeated camera images; they do not measure distinct displayed frames. The timing excludes capture, OBS display, networking, and viewer playback. This was a short test, not a privacy-accuracy benchmark or a promise for other machines. See the [webcam report](playground/obs-plugin/WEBCAM-60FPS-TEST.md) and [earlier OBS measurement](playground/results/reports/obs-higher-fps-live.md).
+| Platform | Download | Notes |
+| --- | --- | --- |
+| **macOS** (Apple Silicon, OBS 33) | [Offleak-0.1.0.dmg](https://dwzbpgm35mwo5.cloudfront.net/downloads/Offleak-0.1.0.dmg) | Open the DMG and run **Install Offleak**. First open: right-click › Open. It copies Offleak to `~/Applications/Offleak`, then installs Python packages, models and the OBS plugins (about 10 minutes, needs internet). |
+| **Windows** 10/11 64-bit (OBS 33) | [Offleak-Setup-0.1.0.exe](https://dwzbpgm35mwo5.cloudfront.net/downloads/Offleak-Setup-0.1.0.exe) | Close OBS first. Installs a private Python, the GPU libraries for your card, the models and the OBS filter (1–3 GB). SmartScreen: More info › Run anyway. |
 
-OBS's canvas FPS, the detector's inference frequency, the worker's processed FPS, and the number of distinct frames visible to a viewer are different measurements. Monitor them separately when evaluating smoothness.
+Website: [dwzbpgm35mwo5.cloudfront.net](https://dwzbpgm35mwo5.cloudfront.net)
 
-## Playground and tests
+<p align="center">
+  <img src="submission/screenshots/website-download.jpg" alt="Offleak website download section: macOS and Windows" width="70%">
+</p>
 
-For the local video-debug interface, after installation run:
+## Set up in OBS
+
+<p align="center">
+  <img src="submission/assets/film-camera.gif" alt="OBS: plus, Video Capture Device, OK" width="60%">
+</p>
+
+1. **Add your camera** in OBS as a normal **Video Capture Device**.
+2. **Start Offleak** (`Start Offleak` on Windows, `Start Offleak Direct.command` on macOS) and copy the **private dock URL** it prints (`http://127.0.0.1:8767/#<token>`).
+3. In OBS choose **Docks → Custom Browser Docks…**, name it **Offleak People**, paste the URL and click **Apply**.
+4. Right-click the camera › **Filters** › **+** › **Offleak direct filter**.
+5. In the dock, click **Add people from webcam** (or **Choose photo**) for everyone who should stay visible. Everyone else is blurred.
+
+Keep the dock URL private: its token grants access to the dock's reference images and controls. The preview stays black while models load and the lookahead buffer fills.
+
+## Run from source
+
+The clean app lives in [`app/`](app/); see [`app/README.md`](app/README.md) for internals. Commands run from `app/`.
+
+| What | How |
+| --- | --- |
+| Install (venv, models, OBS source, scene collection) | double-click `Install Offleak.command` |
+| Direct filter + dock | double-click `Start Offleak Direct.command`, then open `http://127.0.0.1:8767/#<token>` |
+| Virtual Camera path (launcher) | double-click `Start Offleak.command` |
+| Debug UI | `.venv/bin/python -m offleak.ui.server` → http://127.0.0.1:8765 |
+| Redact a file (audio copied) | `.venv/bin/python -m offleak.cli.redact in.mp4 out.mp4 --exclude face.png` |
+| Live from the command line | `.venv/bin/python -m offleak.cli.stream in.mp4 out.mp4 --realtime --preview` |
+| Build the native OBS pieces | `native/build_direct_filter.sh`, `native/build_source.sh`, `native/build_windows_plugin.sh` (need `OBS_SDK`, `SIMDE_INCLUDE`) |
+| Build the installers | `installers/build_macos.sh` → `dist/Offleak-0.1.0.dmg`, `installers/build_windows.sh` → `dist/Offleak-Setup-0.1.0.exe` |
+
+## Verify
 
 ```sh
-playground/.venv/bin/python playground/scripts/ui.py
+cd app
+.venv/bin/python -m pytest tests            # 30 tests: core, detectors, dock, OBS transport
+.venv/bin/python tools/benchmark/bench.py make
+.venv/bin/python tools/benchmark/bench.py eval --report r.json
 ```
 
-Open `http://127.0.0.1:8765/`. This interface can show an **unredacted original preview** and is intended for local debugging.
+The pytest suite covers logic, transport and the dock; it does not prove live privacy coverage. The benchmark uses synthetic ground truth on real footage.
 
-From the project root, selected checks are:
+## Results
 
-```sh
-playground/.venv/bin/python playground/scripts/tests/test_combined_logic.py
-playground/.venv/bin/python playground/obs-plugin/test-direct-controller.py
-playground/.venv/bin/python playground/obs-plugin/test-direct-worker.py
-playground/.venv/bin/python playground/obs-plugin/test-detection-switches.py
-playground/.venv/bin/python playground/obs-plugin/test-multiple-reference-faces.py
-playground/.venv/bin/python playground/obs-plugin/test-people-dock.py
-```
+<p align="center">
+  <img src="https://img.shields.io/badge/QR%20codes%20masked-99.5%25-A9C9FF?style=for-the-badge" alt="QR codes masked 99.5%">
+  <img src="https://img.shields.io/badge/phone%20numbers%20masked-99.7%25-B7A6FF?style=for-the-badge" alt="Phone numbers masked 99.7%">
+  <img src="https://img.shields.io/badge/bystanders%20blurred-98.3%25-8CE6D1?style=for-the-badge" alt="Bystanders blurred 98.3%">
+</p>
 
-These checks cover selected logic and local transport; they do **not** establish live privacy coverage. The [direct-filter guide](playground/obs-plugin/DIRECT-FILTER-EXPERIMENT.md) documents its isolated OBS harness. The [playground guide](playground/README.md) and [experiment reports](playground/results/reports/) contain further setup, benchmarks, and limitations.
+At live detector rates, on clips never used for tuning (random mirroring, rotation, low resolution, motion blur, JPEG and brightness):
 
-## Project layout
+| Set | QR | Phone | Streamer visible | Bystanders blurred | Longest leak QR / phone |
+| --- | --- | --- | --- | --- | --- |
+| Upright | 99.5% | 99.7% | 91.0% | 98.3% | 133 ms / 100 ms |
+| Handheld rotation | 95.6% | 78.5% | 88.9% | 93.9% | 1.3 s / 4.0 s |
+
+- With every detector on every frame (offline), QR and phone were both 100% with zero exposure gap.
+- Live run of a 176 s clip on an M1 Pro: all 5,285 frames at 29.98 fps, 0 dropped, delay flat at 1.51 s.
+- Direct OBS filter, 60 fps target, M1 Pro webcam test: about 44–51 processed frames/s.
+
+Full write-up: [`playground/results/reports/COMBINED_PIPELINE.md`](playground/results/reports/COMBINED_PIPELINE.md).
+
+## Built with Codex
+
+<p align="center">
+  <img src="submission/assets/film-codex.gif" alt="Codex hub with four agents; a loop of experiment, tune, optimize, evaluate; human review; build and port to macOS and Windows" width="100%">
+</p>
+
+Every step ran through **Codex** as a **multi-agent** process with **human review** at each gate: research, model experiments in the [`playground/`](playground/) (YuNet, SFace, SCRFD, Apple Vision, YOLO pose and head models, RapidOCR, QR detectors, BoT-SORT/ByteTrack), tune → optimize → evaluate loops against the benchmark, then the clean [`app/`](app/), the C OBS filter, the dock, Twitch EventSub, and the macOS and Windows installers.
+
+## Honest limits
+
+- **Not a guarantee.** Faces can be missed or matched to the wrong person, and numbers under about 12 px tall are missed. Review the output first.
+- **Identity switches** near the streamer can unblur a bystander for under a second.
+- **Audio is never redacted**, and the lookahead delays video; set a matching audio delay in OBS.
+- **Twitch** status and alerts may be delayed during a disconnect. Protection must be running before you go live and never depends on Twitch.
+- **Licences:** Ultralytics and QRDet weights are AGPL-3.0.
+
+## Repository map
 
 | Path | Purpose |
 | --- | --- |
-| `playground/scripts/app/` | Detection, tracking, redaction, and live pipeline. |
-| `playground/obs-plugin/` | Native OBS source and experimental direct filter, dock, controller, and tests. |
-| `playground/scripts/` | Local debug UI, OBS worker, launcher, setup scripts, and benchmarks. |
-| `playground/models/` | Model download instructions and locally downloaded weights. |
-| `playground/experiments/` | Performance, platform, and interface experiments. |
-| `playground/results/reports/` | Findings, measurements, and experiment limitations. |
-| `playground/trash/` | Archived earlier experiments. |
+| [`app/`](app/) | The clean Offleak app: `offleak/` package (detection, redaction, pipeline, OBS worker, dock, Twitch), native OBS plugins, installers, website, tests, benchmark. |
+| [`playground/`](playground/) | Experiments, benchmarks and reports that led to the app. |
+| [`submission/submission-description.md`](submission/submission-description.md) | Devpost-ready project story. |
+| [`submission/assets/`](submission/assets/) | Banner, animated architecture and film GIFs. |
+| [`submission/screenshots/`](submission/screenshots/) | App, OBS and website screenshots. |
+| [`video/`](video/) | The demo film's source: canvas engine, voice-over, score, renderer, and these README assets ([`video/scripts/readme_assets.py`](video/scripts/readme_assets.py)). |
 
-## License
+## License and attribution
 
-Offleak's code is provided under the [MIT License](LICENSE). Models and dependencies may have different terms; see [model licensing notes](playground/models/README.md).
+Offleak is licensed under [AGPL-3.0](LICENSE).
+
+- The banner, animated diagrams and `film-*.gif` excerpts come from Offleak's own demo film, drawn on canvas by [`video/comp/`](video/comp/); its score and sound design are synthesized in [`video/scripts/audio.py`](video/scripts/audio.py), and the voice-over uses Qwen3-TTS. The street scene and Twitch page are illustrations.
+- `demo-*.gif` and the dock screenshot are crops of the real OBS recording.
+- News headlines are quoted with links to their sources in the [submission description](submission/submission-description.md#inspiration).
+- Models and dependencies keep their own licences; Ultralytics and QRDet are AGPL-3.0.
+- OBS Studio, Twitch, Apple, macOS and Windows are trademarks of their respective owners; no affiliation or endorsement is implied.
