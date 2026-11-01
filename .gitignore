@@ -165,3 +165,6 @@ playground/results/*
 
 # Private local product research
 /PRODUCT_RESEARCH.md
+
+# Local Rust experiment build artifacts
+playground/experiments/**/target/
