@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Experimental local worker for the direct OBS filter; not for live streaming."""
 import argparse
+import json
 import os
 from pathlib import Path
 import socket
@@ -8,6 +9,7 @@ import stat
 import struct
 import sys
 import threading
+import time
 
 import cv2
 import numpy as np
@@ -84,11 +86,36 @@ class FilterCamera:
             os.unlink(self.path)
 
 
+def report_stats():
+    previous_frames = 0
+    previous_time = time.monotonic()
+    while obs.running:
+        time.sleep(5)
+        now = time.monotonic()
+        frames = obs.stats.get('frames', 0)
+        print(f"Offleak output: {(frames - previous_frames) / (now - previous_time):.1f} processed frames/s; "
+              f"dropped={obs.stats.get('dropped', 0)}; "
+              f"delay_ms={obs.stats.get('latency_ms', 'warming up')}", flush=True)
+        status_file = Path.home() / 'Library/Application Support/obs-studio/plugin_config/offleak-direct/status.json'
+        try:
+            status_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            temp = status_file.with_suffix('.tmp')
+            temp.write_text(json.dumps({'time': time.time(), 'fps': round((frames - previous_frames) / (now - previous_time), 1), 'latency_ms': obs.stats.get('latency_ms'), 'frames': frames, 'dropped': obs.stats.get('dropped', 0)}))
+            os.chmod(temp, 0o600)
+            os.replace(temp, status_file)
+        except OSError:
+            pass
+        previous_time, previous_frames = now, frames
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fps', type=float, default=30)
     parser.add_argument('--delay', type=float, default=15)
     parser.add_argument('--exclude', nargs='*', type=Path, default=[])
+    parser.add_argument('--no-face', action='store_true')
+    parser.add_argument('--no-qr', action='store_true')
+    parser.add_argument('--no-phone', action='store_true')
     parser.add_argument('--input-socket', help=argparse.SUPPRESS)
     parser.add_argument('--output-socket', help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -96,10 +123,12 @@ def main():
         parser.error('fps and delay must be positive and exclusion images must exist')
     camera = FilterCamera(args.input_socket)
     obs.running = True
+    threading.Thread(target=report_stats, daemon=True).start()
     threading.Thread(target=obs.native_server, args=(args.output_socket or f'/tmp/offleak-direct-output-{os.getuid()}.sock',), daemon=True).start()
     try:
         obs.live(camera, None, args.exclude, fps=args.fps, delay=args.delay,
-                 on_frame=obs.publish, stats=obs.stats, retain_original=False)
+                 on_frame=obs.publish, stats=obs.stats, retain_original=False,
+                 face_enabled=not args.no_face, qr_enabled=not args.no_qr, phone_enabled=not args.no_phone)
     finally:
         obs.running = False
         with obs.condition:

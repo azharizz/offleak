@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <time.h>
 
 OBS_DECLARE_MODULE()
 #ifdef OFFLEAK_DIRECT_TEST
@@ -41,6 +43,7 @@ struct gpu_source {
     bool connected;
     gs_effect_t *effect;
     gs_texture_t *texture;
+    float settings_elapsed;
 };
 
 static bool read_all(int fd, void *buffer, size_t n)
@@ -137,17 +140,70 @@ static void defaults(obs_data_t *settings)
     obs_data_set_default_double(settings, "delay", 5.0);
     obs_data_set_default_int(settings, "fps", 15);
     obs_data_set_default_bool(settings, "worker_enabled", true);
+    obs_data_set_default_bool(settings, "face_enabled", true);
+    obs_data_set_default_bool(settings, "qr_enabled", true);
+    obs_data_set_default_bool(settings, "phone_enabled", true);
+}
+
+/* All faces detected in the captured reference are enrolled. */
+static bool capture_reference(obs_properties_t *props, obs_property_t *property, void *data)
+{
+    UNUSED_PARAMETER(props); UNUSED_PARAMETER(property);
+    struct gpu_source *s = data;
+    const char *home = getenv("HOME");
+    if (!home) return false;
+    char directory[4096], path[4096];
+    if (snprintf(directory, sizeof(directory), "%s/Library/Application Support/obs-studio/plugin_config/offleak-direct/faces", home) >= (int)sizeof(directory)) return false;
+    if (os_mkdirs(directory) == MKDIR_ERROR) return false;
+    chmod(directory, 0700);
+    if (snprintf(path, sizeof(path), "%s/face-%llu.bmp", directory, (unsigned long long)os_gettime_ns()) >= (int)sizeof(path)) return false;
+    uint8_t *pixels = malloc(BYTES);
+    if (!pixels) return false;
+    pthread_mutex_lock(&s->lock);
+    bool available = s->input_sequence != 0;
+    if (available) memcpy(pixels, s->input, BYTES);
+    pthread_mutex_unlock(&s->lock);
+    if (!available) { free(pixels); blog(LOG_WARNING, "Offleak: no webcam frame available"); return false; }
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) { free(pixels); return false; }
+    uint8_t header[54] = {0x42, 0x4d};
+    uint32_t file_size = (uint32_t)BYTES + 54, offset = 54, dib = 40, width = W, height = (uint32_t)-(int32_t)H, image_size = BYTES;
+    uint16_t planes = 1, bpp = 32;
+    memcpy(header+2, &file_size, 4); memcpy(header+10, &offset, 4); memcpy(header+14, &dib, 4);
+    memcpy(header+18, &width, 4); memcpy(header+22, &height, 4); memcpy(header+26, &planes, 2);
+    memcpy(header+28, &bpp, 2); memcpy(header+34, &image_size, 4);
+    bool ok = write(fd, header, sizeof(header)) == sizeof(header);
+    size_t pos = 0;
+    while (ok && pos < BYTES) { ssize_t n = write(fd, pixels + pos, BYTES - pos); if (n <= 0) ok = false; else pos += (size_t)n; }
+    close(fd); free(pixels);
+    if (!ok) { unlink(path); return false; }
+    obs_data_t *settings = obs_source_get_settings(s->source);
+    obs_data_array_t *list = obs_data_get_array(settings, "references");
+    if (!list) list = obs_data_array_create();
+    obs_data_t *entry = obs_data_create();
+    obs_data_set_string(entry, "value", path);
+    obs_data_array_push_back(list, entry);
+    obs_data_set_array(settings, "references", list);
+    obs_data_release(entry); obs_data_array_release(list);
+    obs_source_update(s->source, settings);
+    obs_data_release(settings);
+    return true;
 }
 
 static obs_properties_t *properties(void *data)
 {
-    UNUSED_PARAMETER(data);
     obs_properties_t *p = obs_properties_create();
-    obs_properties_add_path(p, "reference", "Face photo to keep visible", OBS_PATH_FILE,
-                            "Images (*.png *.jpg *.jpeg *.webp)", NULL);
+    obs_properties_add_path(p, "reference", "Existing face photo (optional)", OBS_PATH_FILE,
+                            "Images (*.png *.jpg *.jpeg *.webp *.bmp)", NULL);
+    obs_properties_add_editable_list(p, "references", "Additional people to keep visible", OBS_EDITABLE_LIST_TYPE_FILES,
+                                     "Images (*.png *.jpg *.jpeg *.webp *.bmp)", NULL);
+    obs_properties_add_button2(p, "capture", "Add people from webcam (all detected faces)", capture_reference, data);
     obs_properties_add_float(p, "delay", "Lookahead buffer (seconds)", 1.0, 30.0, 1.0);
-    obs_properties_add_int(p, "fps", "Processing FPS target", 5, 30, 1);
+    obs_properties_add_int(p, "fps", "Processing FPS target (experimental)", 5, 60, 1);
     obs_properties_add_bool(p, "worker_enabled", "Enable local processing");
+    obs_properties_add_bool(p, "face_enabled", "Blur faces (except selected people)");
+    obs_properties_add_bool(p, "qr_enabled", "Blur QR codes");
+    obs_properties_add_bool(p, "phone_enabled", "Blur phone numbers");
     obs_properties_add_text(p, "note", "Experimental: requires the Offleak direct controller running. Changes restart processing; preview goes black.", OBS_TEXT_INFO);
     return p;
 }
@@ -208,6 +264,34 @@ static void destroy(void *data)
     pthread_mutex_destroy(&s->lock); free(s->frame); free(s->black); free(s->input); free(s);
 }
 
+static void tick(void *data, float seconds)
+{
+#ifndef OFFLEAK_DIRECT_TEST
+    struct gpu_source *s = data;
+    s->settings_elapsed += seconds;
+    if (s->settings_elapsed < 0.5f) return;
+    s->settings_elapsed = 0;
+    const char *home = getenv("HOME");
+    if (!home) return;
+    char path[4096];
+    if (snprintf(path, sizeof(path), "%s/Library/Application Support/obs-studio/plugin_config/offleak-direct/settings.json", home) >= (int)sizeof(path)) return;
+    obs_data_t *incoming = obs_data_create_from_json_file(path);
+    if (!incoming) return;
+    obs_data_t *current = obs_source_get_settings(s->source);
+    const char *incoming_json = obs_data_get_json(incoming);
+    const char *current_json = obs_data_get_json(current);
+    bool changed = incoming_json && current_json && strcmp(incoming_json, current_json) != 0;
+    bool capture = *obs_data_get_string(incoming, "capture_request") != 0;
+    if (capture) obs_data_set_string(incoming, "capture_request", "");
+    if (changed) obs_source_update(s->source, incoming);
+    obs_data_release(current);
+    obs_data_release(incoming);
+    if (capture) capture_reference(NULL, NULL, s);
+#else
+    UNUSED_PARAMETER(data); UNUSED_PARAMETER(seconds);
+#endif
+}
+
 static bool frame_fresh(struct gpu_source *s, uint64_t now)
 {
     return s->connected && now >= s->received && now - s->received < 500000000ULL;
@@ -254,5 +338,5 @@ static uint32_t width(void *data) { UNUSED_PARAMETER(data); return W; }
 static uint32_t height(void *data) { UNUSED_PARAMETER(data); return H; }
 static struct obs_source_info filter = {.id = "offleak_direct_filter_experiment", .type = OBS_SOURCE_TYPE_FILTER,
     .output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW, .get_name = name, .create = create,
-    .destroy = destroy, .video_render = render, .get_defaults = defaults, .get_properties = properties, .update = update};
+    .destroy = destroy, .video_render = render, .video_tick = tick, .get_defaults = defaults, .get_properties = properties, .update = update};
 bool obs_module_load(void) { obs_register_source(&filter); return true; }

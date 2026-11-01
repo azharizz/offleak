@@ -46,7 +46,7 @@ def sink(dst, w, h, fps):
                             stdin=subprocess.PIPE)
 
 
-def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='bytetrack.yaml', on_frame=None, stop=None, stats=None, retain_original=True):
+def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='bytetrack.yaml', on_frame=None, stop=None, stats=None, retain_original=True, face_enabled=True, qr_enabled=True, phone_enabled=True):
     """Run the live redactor until the source ends or `stop` is set. on_frame(original, redacted, mask, keep_boxes)
     is called for every output frame; `stats` (a dict) is updated in place for dashboards. Returns the final report."""
     probe = source if hasattr(source, 'read') else cv2.VideoCapture(int(source) if str(source).isdigit() else str(source))
@@ -54,15 +54,17 @@ def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='byt
     if not w or not h:
         raise SystemExit('cannot read source')
     import torch
-    det = cd.Detector(exclude, w, h, 'mps' if torch.backends.mps.is_available() else 'cpu', tracker=tracker)
-    det.heads(np.zeros((h, w, 3), np.uint8))  # warm up models before the clock starts
-    det.objects(np.zeros((h, w, 3), np.uint8))
+    det = cd.Detector(exclude, w, h, 'mps' if torch.backends.mps.is_available() else 'cpu', tracker=tracker, face_enabled=face_enabled, qr_enabled=qr_enabled, phone_enabled=phone_enabled)
+    if face_enabled:
+        det.heads(np.zeros((h, w, 3), np.uint8))
+    if qr_enabled or phone_enabled:
+        det.objects(np.zeros((h, w, 3), np.uint8))
     det.n_heads = det.n_obj = 0
     stats = {} if stats is None else stats
     stop = stop or threading.Event()
     q = queue.Queue()
     threading.Thread(target=reader, args=(probe, fps, realtime, q, stop), daemon=True).start()
-    r = cd.Redactor(fps, w, h, delay=delay)
+    r = cd.Redactor(fps, w, h, delay=delay, face_enabled=face_enabled, objects_enabled=qr_enabled or phone_enabled)
     enc = sink(output, w, h, fps) if output else None
     pools = {k: ThreadPoolExecutor(1) for k in ('heads', 'objects')}
     jobs = {'heads': None, 'objects': None}
@@ -103,9 +105,9 @@ def live(source, output, exclude, delay=1.5, realtime=False, fps=0, tracker='byt
             if on_frame and retain_original:
                 originals[i] = frame.copy()
             collect()
-            if jobs['heads'] is None:
+            if face_enabled and jobs['heads'] is None:
                 jobs['heads'] = pools['heads'].submit(lambda i=i, f=frame: (i, det.heads(f)))
-            if jobs['objects'] is None:
+            if (qr_enabled or phone_enabled) and jobs['objects'] is None:
                 jobs['objects'] = pools['objects'].submit(lambda i=i, f=frame: (i, det.objects(f)))
             drain()
         collect(final=True)

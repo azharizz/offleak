@@ -13,6 +13,10 @@ with tempfile.TemporaryDirectory() as d:
     args = m.command({'reference': str(photo), 'fps': 20, 'delay': 3})
     assert args[-2:] == ['--exclude', str(photo)]
     assert args[args.index('--fps') + 1] == '20'
+    second = Path(d) / 'another.jpg'
+    second.touch()
+    args = m.command({'reference': str(photo), 'references': [{'value': str(second)}], 'fps': 60})
+    assert args[-3:] == ['--exclude', str(photo), str(second)]
 for settings in ({'fps': 0}, {'delay': 31}, {'reference': '/not/a/photo'}):
     try:
         m.command(settings)

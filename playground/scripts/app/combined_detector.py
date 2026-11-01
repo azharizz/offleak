@@ -44,7 +44,7 @@ def phone_spans(s):
     return [m.range() for m in _ND.matchesInString_options_range_(s, 0, (0, s.length()))]
 
 
-def vision(img, qr=True, fast=False):
+def vision(img, qr=True, fast=False, phone=True):
     """Apple Vision on a BGR image -> (qr rects, phone rects, text score); rects normalized x1,y1,x2,y2, top-left origin."""
     import Quartz
     import Vision
@@ -54,10 +54,13 @@ def vision(img, qr=True, fast=False):
         raise RuntimeError('could not encode frame')
     src = Quartz.CGImageSourceCreateWithData(NSData.dataWithBytes_length_(enc.tobytes(), len(enc)), None)
     cg = Quartz.CGImageSourceCreateImageAtIndex(src, 0, None)
-    ocr = Vision.VNRecognizeTextRequest.alloc().init()
-    ocr.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast if fast else Vision.VNRequestTextRecognitionLevelAccurate)
-    ocr.setUsesLanguageCorrection_(False)
-    reqs = [ocr]
+    ocr = None
+    reqs = []
+    if phone:
+        ocr = Vision.VNRecognizeTextRequest.alloc().init()
+        ocr.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast if fast else Vision.VNRequestTextRecognitionLevelAccurate)
+        ocr.setUsesLanguageCorrection_(False)
+        reqs.append(ocr)
     if qr:
         bar = Vision.VNDetectBarcodesRequest.alloc().init()
         bar.setSymbologies_([Vision.VNBarcodeSymbologyQR])
@@ -68,7 +71,7 @@ def vision(img, qr=True, fast=False):
     norm = lambda b: (b.origin.x, 1 - b.origin.y - b.size.height, b.origin.x + b.size.width, 1 - b.origin.y)
     qrs = [norm(o.boundingBox()) for o in (bar.results() or [])] if qr else []
     phones, score = [], 0.
-    for o in ocr.results() or []:
+    for o in (ocr.results() or []) if ocr else []:
         c = o.topCandidates_(1)
         if not c:
             continue
@@ -199,29 +202,37 @@ def exempt(events, tid, j, e, keep):
     return bool(near) and min(near)[1] == 1
 
 
+def reference_features(face, recognizer, paths, w, h):
+    """Enroll every detected face in each selected reference image."""
+    gallery = []
+    for path in paths:
+        image = cv2.imread(str(path))
+        if image is None:
+            raise SystemExit(f'cannot read exclude image {path}')
+        face.setInputSize((image.shape[1], image.shape[0]))
+        _, faces = face.detect(image)
+        if faces is None or len(faces) == 0:
+            raise SystemExit(f'no face found in exclude image {path}')
+        for detected in faces:
+            gallery.append(recognizer.feature(recognizer.alignCrop(image, detected)))
+    face.setInputSize((w, h))
+    return gallery
+
+
 class Detector:
-    def __init__(self, exclude, w, h, device, tracker='bytetrack.yaml', check_every=5, yunet=True):
+    def __init__(self, exclude, w, h, device, tracker='bytetrack.yaml', check_every=5, yunet=True, face_enabled=True, qr_enabled=True, phone_enabled=True):
         import torch  # noqa: F401  (ultralytics needs it; imported here so tests stay light)
         from qrdet import QRDetector
         from ultralytics import YOLO
         self.w, self.h, self.device, self.tracker, self.check_every = w, h, device, tracker, check_every
+        self.face_enabled, self.qr_enabled, self.phone_enabled = face_enabled, qr_enabled, phone_enabled
         self.face = cv2.FaceDetectorYN.create(str(M / 'face_detection_yunet.onnx'), '', (320, 320), .6, .3, 5000)
         self.rec = cv2.FaceRecognizerSF.create(str(M / 'face_recognition_sface.onnx'), '')
-        self.gallery = []
-        for p in exclude:
-            im = cv2.imread(str(p))
-            if im is None:
-                raise SystemExit(f'cannot read exclude image {p}')
-            self.face.setInputSize((im.shape[1], im.shape[0]))
-            _, fs = self.face.detect(im)
-            if fs is None:
-                raise SystemExit(f'no face found in exclude image {p}')
-            self.gallery.append(self.rec.feature(self.rec.alignCrop(im, max(fs, key=lambda f: f[2] * f[3]))))
-        self.face.setInputSize((w, h))
+        self.gallery = reference_features(self.face, self.rec, exclude, w, h)
         # benchmark (results/bench): BoT-SORT, a YOLO11n head detector and SCRFD-2.5G did not beat pose+YuNet+ByteTrack
-        self.pose = YOLO(str(M / 'yolo11n-pose.pt'))
-        self.screens = YOLO(str(M / 'yolo11n.pt'))
-        self.qr = QRDetector(model_size='n', conf_th=.3).model
+        self.pose = YOLO(str(M / 'yolo11n-pose.pt')) if face_enabled else None
+        self.screens = YOLO(str(M / 'yolo11n.pt')) if (qr_enabled or phone_enabled) else None
+        self.qr = QRDetector(model_size='n', conf_th=.3).model if qr_enabled else None
         self.use_yunet = yunet
         self.rot, self.rot_hist = 0, deque(maxlen=2)  # quarter turns (clockwise) that make people upright, from Vision face roll
         self.mirror, self.mirror_ev = False, 0.  # text is mirrored (selfie camera); chosen by averaged OCR evidence
@@ -312,9 +323,9 @@ class Detector:
         if m:
             g = cv2.flip(g, 1)
         gh, gw = g.shape[:2]
-        q, p, sc = vision(g)
+        q, p, sc = vision(g, qr=self.qr_enabled, phone=self.phone_enabled)
         qr, phone = [denorm(r, 0, 0, gw, gh) for r in q], [denorm(r, 0, 0, gw, gh) for r in p]
-        if self.n_obj % self.check_every == 0:
+        if self.phone_enabled and self.n_obj % self.check_every == 0:
             # mirror check: one extra OCR of the flipped frame, evidence averaged before switching (single frames
             # flip-flop); numbers read in either orientation are kept this frame (fail closed)
             _, pa, sa = vision(cv2.flip(g, 1), qr=False)
@@ -331,11 +342,12 @@ class Detector:
             s = min(3., 960 / max(crop.shape[:2]))
             if s > 1.2:
                 crop = cv2.resize(crop, None, fx=s, fy=s, interpolation=cv2.INTER_CUBIC)
-            q, p, _ = vision(crop)
+            q, p, _ = vision(crop, qr=self.qr_enabled, phone=self.phone_enabled)
             qr += [denorm(r, x1, y1, x2 - x1, y2 - y1) for r in q]
             phone += [denorm(r, x1, y1, x2 - x1, y2 - y1) for r in p]
-        pred = self.qr.predict(g, imgsz=1280, conf=.35, verbose=False, device=self.device)[0]  # t-shirt prints scored .18-.30, real codes .36-.86
-        qr += [list(map(int, b)) for b in pred.boxes.xyxy.cpu().numpy()]
+        if self.qr_enabled:
+            pred = self.qr.predict(g, imgsz=1280, conf=.35, verbose=False, device=self.device)[0]
+            qr += [list(map(int, b)) for b in pred.boxes.xyxy.cpu().numpy()]
         back = lambda b: [int(v) for v in unrot_box(unflip(b, m, False, gw, gh), k, w, h)]
         return [back(b) for b in qr], [back(b) for b in phone]
 
@@ -391,8 +403,9 @@ class Redactor:
     """Feed frames with add(); attach detections with put_heads/put_objects (any frame, any order);
     emit() returns (idx, redacted frame, mask) once `delay` frames of lookahead exist."""
 
-    def __init__(self, fps, w, h, delay=1.0, hold=.8, face_hold=.15, keep=1.):  # tuned for live rates (results/bench/tune)
+    def __init__(self, fps, w, h, delay=1.0, hold=.8, face_hold=.15, keep=1., face_enabled=True, objects_enabled=True):  # tuned for live rates (results/bench/tune)
         self.w, self.h = w, h
+        self.face_enabled, self.objects_enabled = face_enabled, objects_enabled
         self.fps = fps
         self.D, self.hold, self.fhold, self.keep = round(delay * fps), round(hold * fps), round(face_hold * fps), round(keep * fps)
         self.flow = Flow(w, h)
@@ -447,7 +460,7 @@ class Redactor:
                 fill(obj, self.carry(b, j, i), .15, 6)
         window = round(self.fps)
         keys = [j for j in range(max(0, i - window), min(self.n, i + window + 1)) if j in self.head]
-        if not keys or not any(j in self.obj for j in range(max(0, i - window), min(self.n, i + window + 1))):
+        if (self.face_enabled and not keys) or (self.objects_enabled and not any(j in self.obj for j in range(max(0, i - window), min(self.n, i + window + 1)))):
             self.failsafe += 1  # a detector stalled: blur everything rather than show unchecked pixels
             return np.full((self.h, self.w), 255, np.uint8)
         if keys:

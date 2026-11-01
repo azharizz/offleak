@@ -33,7 +33,7 @@ This is a local debug interface: its left-hand preview shows the unredacted orig
 
 ## OBS integration (experimental)
 
-A separate [direct OBS filter prototype](obs-plugin/DIRECT-FILTER-EXPERIMENT.md) captures an attached source without Virtual Camera. It is uninstalled and is not safe or ready for live streaming; the working integration below remains the default.
+A separate [direct OBS filter prototype](obs-plugin/DIRECT-FILTER-EXPERIMENT.md) captures an attached source without Virtual Camera. It has been installed for testing on the development Mac but is not included in the existing installer and is not ready for live streaming; the Virtual Camera integration below remains the installer-supported path.
 
 
 Offleak can read OBS Virtual Camera and provide a native OBS source called **Offleak Redacted Video**. A local Twitch capture has been checked with OBS on macOS. Detection can miss private information; check the output before using it live.
