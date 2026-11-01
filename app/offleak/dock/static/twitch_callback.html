@@ -1,0 +1,4 @@
+<!doctype html><meta name=referrer content=no-referrer><p id=result>Connecting to Twitch…</p><script>
+const p=new URLSearchParams(location.hash.slice(1));history.replaceState(null,'',location.pathname);
+fetch('/twitch/finish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:p.get('access_token'),state:p.get('state')})}).then(r=>{document.getElementById('result').textContent=r.ok?'Connected. You can close this window.':'Connection failed or authorization was denied. Return to Offleak and try again.'}).catch(()=>{document.getElementById('result').textContent='Connection failed. Return to Offleak and try again.'});
+</script>

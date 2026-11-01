@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Offleak — Live on. Leak off.</title>
+<meta name="description" content="Offleak blurs bystanders' faces, QR codes and phone numbers in your OBS stream in real time, on your own computer. Free and open source for macOS and Windows.">
+<meta name="theme-color" content="#05070d">
+<meta property="og:title" content="Offleak — Live on. Leak off.">
+<meta property="og:description" content="Real-time privacy filter for IRL streams. Faces, QR codes and phone numbers blurred on your own machine.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#05070d; --ink-2:#0a0e18; --panel:rgba(18,24,38,.55); --line:rgba(169,201,255,.12); --line-2:rgba(169,201,255,.22);
+  --text:#eef2fb; --muted:#8d97ab; --dim:#5d667a;
+  --mint:#8ce6d1; --sky:#a9c9ff; --violet:#b7a6ff; --rose:#ff8fa3; --gold:#ffd28a;
+  --grad:linear-gradient(110deg,var(--mint),var(--sky) 45%,var(--violet));
+  --ease:cubic-bezier(.16,1,.3,1); --ease-in-out:cubic-bezier(.65,0,.35,1);
+  --radius:22px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--ink);color:var(--text);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll-behavior:smooth}
+body{font:400 16px/1.6 Inter,system-ui,-apple-system,sans-serif;overflow-x:hidden;letter-spacing:-.005em}
+a{color:inherit;text-decoration:none}
+img,svg,canvas{display:block}
+::selection{background:rgba(140,230,209,.3)}
+.wrap{width:min(1200px,100% - 48px);margin-inline:auto}
+@media (max-width:640px){.wrap{width:calc(100% - 32px)}}
+.serif{font-family:"Instrument Serif",Georgia,serif;font-weight:400;letter-spacing:-.01em}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* ---------- atmosphere: aurora, grid, grain ---------- */
+.aurora{position:fixed;inset:-20vmax;z-index:-3;pointer-events:none;filter:blur(80px) saturate(120%);opacity:.75}
+.aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:drift 28s var(--ease-in-out) infinite alternate}
+.aurora i:nth-child(1){width:52vmax;height:52vmax;left:8%;top:-6%;background:radial-gradient(circle,rgba(140,230,209,.30),transparent 62%)}
+.aurora i:nth-child(2){width:60vmax;height:60vmax;right:-6%;top:4%;background:radial-gradient(circle,rgba(169,201,255,.26),transparent 60%);animation-duration:34s;animation-delay:-8s}
+.aurora i:nth-child(3){width:46vmax;height:46vmax;left:30%;top:42%;background:radial-gradient(circle,rgba(183,166,255,.20),transparent 62%);animation-duration:40s;animation-delay:-16s}
+@keyframes drift{0%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(6vmax,4vmax,0) scale(1.12)}100%{transform:translate3d(-5vmax,7vmax,0) scale(.94)}}
+.grid-bg{position:fixed;inset:0;z-index:-2;pointer-events:none;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:72px 72px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 20%,transparent 75%);opacity:.35}
+.grain{position:fixed;inset:-50%;z-index:60;pointer-events:none;opacity:.055;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");animation:grain 1.2s steps(6) infinite}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-3%)}60%{transform:translate(-2%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
+.cursor-glow{position:fixed;left:0;top:0;width:520px;height:520px;margin:-260px 0 0 -260px;border-radius:50%;pointer-events:none;z-index:-1;background:radial-gradient(circle,rgba(140,230,209,.10),transparent 60%);transform:translate3d(-999px,-999px,0);transition:opacity .4s}
+
+/* ---------- nav ---------- */
+.nav{position:fixed;top:14px;left:50%;z-index:50;transform:translateX(-50%);width:min(1120px,calc(100% - 24px));display:flex;align-items:center;gap:20px;padding:10px 12px 10px 18px;border:1px solid var(--line);border-radius:999px;background:rgba(8,11,19,.55);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);transition:background .5s var(--ease),border-color .5s,top .5s var(--ease)}
+.nav.scrolled{background:rgba(8,11,19,.82);border-color:var(--line-2);top:10px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.02em}
+.brand img{width:28px;height:28px}
+.nav-links{display:flex;gap:26px;margin-left:auto;font-size:14px;color:var(--muted)}
+.nav-links a{position:relative;transition:color .3s}
+.nav-links a::after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:1px;background:var(--grad);transform:scaleX(0);transform-origin:right;transition:transform .5s var(--ease)}
+.nav-links a:hover{color:var(--text)}.nav-links a:hover::after{transform:scaleX(1);transform-origin:left}
+.nav .btn{padding:9px 16px;font-size:14px}
+@media (max-width:820px){.nav-links{display:none}.nav .btn{margin-left:auto}}
+
+/* ---------- buttons ---------- */
+.btn{position:relative;display:inline-flex;align-items:center;gap:10px;padding:15px 24px;border-radius:999px;font-weight:600;font-size:15px;letter-spacing:-.01em;color:#04110d;background:var(--mint);isolation:isolate;transition:transform .5s var(--ease),box-shadow .5s var(--ease);will-change:transform;cursor:pointer;border:0}
+.btn::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;background:linear-gradient(110deg,#a3f0de,#c3d9ff 60%,#d3c8ff);transition:opacity .5s}
+.btn:hover{box-shadow:0 18px 50px -12px rgba(140,230,209,.55),0 0 0 1px rgba(255,255,255,.25) inset}
+.btn .arrow{transition:transform .5s var(--ease)}
+.btn:hover .arrow{transform:translateY(2px)}
+.btn-primary{padding:18px 30px;font-size:16px}
+.btn-primary::after{content:"";position:absolute;inset:-2px;border-radius:inherit;z-index:-2;padding:2px;background:conic-gradient(from var(--angle),transparent 0 70%,#fff 80%,var(--mint) 88%,transparent 95%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spin 3.2s linear infinite}
+@property --angle{syntax:"<angle>";initial-value:0deg;inherits:false}
+@keyframes spin{to{--angle:360deg}}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--line-2)}
+.btn-ghost::before{background:rgba(169,201,255,.06)}
+.btn-ghost:hover{box-shadow:0 0 0 1px var(--line-2) inset,0 18px 40px -18px rgba(169,201,255,.45)}
+
+/* ---------- reveal system ---------- */
+.reveal{opacity:0;transform:translateY(28px);filter:blur(6px);transition:opacity 1.1s var(--ease),transform 1.1s var(--ease),filter 1.1s var(--ease);transition-delay:var(--d,0s)}
+.reveal.in{opacity:1;transform:none;filter:none}
+.line-mask{display:block;overflow:hidden;padding-bottom:.06em}
+.line-mask>span{display:inline-block;transform:translateY(110%) rotate(3deg);transform-origin:left bottom;transition:transform 1.3s var(--ease);transition-delay:var(--d,0s)}
+.in .line-mask>span,.line-mask.in>span{transform:none}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding:170px 0 90px;text-align:center}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;padding:7px 14px 7px 8px;border:1px solid var(--line-2);border-radius:999px;font-size:13px;color:var(--muted);background:rgba(10,14,24,.6);backdrop-filter:blur(10px)}
+.eyebrow b{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:rgba(140,230,209,.12);color:var(--mint);font-weight:500;font-size:12px}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 0 rgba(140,230,209,.6);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 10px rgba(140,230,209,0)}100%{box-shadow:0 0 0 0 rgba(140,230,209,0)}}
+.hero h1{margin:28px auto 0;font-size:clamp(56px,10.5vw,148px);line-height:.92;letter-spacing:-.045em;font-weight:600}
+.hero h1 .serif{font-style:italic;font-weight:400;letter-spacing:-.02em;padding-right:.06em}
+.hero p.lead{max-width:640px;margin:30px auto 0;font-size:clamp(17px,1.6vw,20px);color:var(--muted);line-height:1.6}
+.hero p.lead em{color:var(--text);font-style:normal}
+.cta{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:40px}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.cta small{font-size:13px;color:var(--dim)}
+.cta small a{color:var(--muted);border-bottom:1px solid var(--line-2);transition:color .3s,border-color .3s}
+.cta small a:hover{color:var(--text);border-color:var(--mint)}
+
+/* ---------- stage (live demo) ---------- */
+.stage{position:relative;margin:80px auto 0;width:min(1120px,100%);perspective:1600px}
+.stage-glow{position:absolute;inset:8% 6% -6%;z-index:-1;background:radial-gradient(60% 60% at 50% 40%,rgba(140,230,209,.35),rgba(169,201,255,.18) 45%,transparent 70%);filter:blur(60px);opacity:.8}
+.device{position:relative;border-radius:26px;padding:10px;background:linear-gradient(180deg,rgba(169,201,255,.18),rgba(169,201,255,.04));box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 60px 120px -40px rgba(0,0,0,.8),0 30px 60px -30px rgba(140,230,209,.25);transform:rotateX(14deg) scale(.94);transform-origin:50% 100%;transition:transform 1.6s var(--ease);will-change:transform}
+.device.in{transform:rotateX(0) scale(1)}
+.screen{position:relative;border-radius:18px;overflow:hidden;aspect-ratio:16/9;background:#0b1020;cursor:ew-resize;touch-action:pan-y}
+.screen canvas{width:100%;height:100%}
+.hud{position:absolute;inset:0;pointer-events:none;padding:16px 18px;display:flex;flex-direction:column;justify-content:space-between;font:500 12px/1 "JetBrains Mono",monospace;color:#dfe8ff}
+.hud-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:rgba(5,7,13,.62);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08)}
+.live{color:#fff}.live i{width:8px;height:8px;border-radius:50%;background:#ff4d6d;box-shadow:0 0 12px #ff4d6d;animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.35}}
+.stat-mint{color:var(--mint)}
+.side-label{position:absolute;top:50%;transform:translateY(-50%);font:600 11px/1 "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.75);padding:8px 10px;border-radius:8px;background:rgba(5,7,13,.5);backdrop-filter:blur(6px);transition:opacity .4s}
+.side-label.l{left:16px}.side-label.r{right:16px;color:var(--mint)}
+.handle{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:linear-gradient(180deg,transparent,rgba(255,255,255,.95) 12%,rgba(255,255,255,.95) 88%,transparent);pointer-events:none;box-shadow:0 0 24px rgba(140,230,209,.8)}
+.handle::after{content:"";position:absolute;top:50%;left:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(5,7,13,.65) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 7-5 5 5 5M15 7l5 5-5 5'/%3E%3C/svg%3E") center/20px no-repeat;border:1px solid rgba(255,255,255,.4);backdrop-filter:blur(8px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.stage-caption{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;margin-top:22px;font-size:13px;color:var(--dim)}
+.stage-caption span{display:inline-flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:2px}
+
+/* ---------- marquee ---------- */
+.marquee{margin:110px 0 0;border-block:1px solid var(--line);padding:22px 0;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+.marquee-track{display:flex;gap:64px;width:max-content;animation:marquee 38s linear infinite;color:var(--muted);font-size:15px;white-space:nowrap}
+.marquee-track span{display:inline-flex;align-items:center;gap:64px}
+.marquee-track span::after{content:"✦";color:var(--dim);font-size:11px}
+@keyframes marquee{to{transform:translateX(-50%)}}
+
+/* ---------- sections ---------- */
+section{position:relative}
+.sec{padding:150px 0 0}
+.sec-head{max-width:760px}
+.kicker{display:inline-flex;align-items:center;gap:10px;font:500 12px/1 "JetBrains Mono",monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--mint)}
+.kicker::before{content:"";width:28px;height:1px;background:var(--mint)}
+.sec h2{margin-top:22px;font-size:clamp(40px,5.6vw,76px);line-height:1;letter-spacing:-.04em;font-weight:600}
+.sec h2 .serif{font-style:italic;font-weight:400}
+.sec p.sub{margin-top:22px;max-width:600px;color:var(--muted);font-size:18px}
+
+/* ---------- feature cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:64px}
+@media (max-width:960px){.cards{grid-template-columns:1fr}}
+.card{position:relative;border-radius:var(--radius);padding:30px;min-height:440px;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(18,24,38,.75),rgba(10,14,24,.75));border:1px solid var(--line);overflow:hidden;isolation:isolate;transition:transform .8s var(--ease),border-color .5s}
+.card::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(420px circle at var(--mx,50%) var(--my,0%),rgba(140,230,209,.14),transparent 45%);opacity:0;transition:opacity .5s}
+.card:hover{border-color:var(--line-2);transform:translateY(-6px)}
+.card:hover::before{opacity:1}
+.card .vis{position:relative;height:210px;margin:-6px -6px 26px;border-radius:16px;background:radial-gradient(120% 90% at 50% 0%,rgba(169,201,255,.10),rgba(5,7,13,.2));border:1px solid rgba(255,255,255,.05);overflow:hidden}
+.card h3{font-size:24px;line-height:1.15;letter-spacing:-.03em;font-weight:600}
+.card h3 .serif{font-style:italic;font-weight:400;font-size:1.08em}
+.card p{margin-top:12px;color:var(--muted);font-size:15.5px}
+.tag{margin-top:auto;padding-top:22px;display:flex;gap:8px;flex-wrap:wrap}
+.tag span{font:500 11.5px/1 "JetBrains Mono",monospace;padding:7px 10px;border-radius:999px;color:var(--sky);background:rgba(169,201,255,.08);border:1px solid rgba(169,201,255,.14)}
+
+/* card 1: face mosaic */
+.faces{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;gap:16px;padding-bottom:16px}
+.person{position:relative;width:74px;display:flex;flex-direction:column;align-items:center}
+.person .head{width:46px;height:52px;border-radius:46% 46% 44% 44%;background:linear-gradient(180deg,#e8c3a5,#c79a7d)}
+.person .body{width:74px;height:70px;margin-top:6px;border-radius:30px 30px 8px 8px;background:linear-gradient(180deg,#30405e,#1d2638)}
+.person .mosaic{position:absolute;top:-6px;left:50%;width:60px;height:66px;margin-left:-30px;border-radius:12px;display:grid;grid-template-columns:repeat(5,1fr);overflow:hidden;opacity:0;transform:scale(.6);transition:opacity .6s var(--ease),transform .8s var(--ease)}
+.person .mosaic i{background:hsl(var(--h,25) 30% calc(var(--l,60) * 1%))}
+.person.hidden .mosaic{opacity:1;transform:none}
+.person.me{width:92px;z-index:1}.person.me .head{width:58px;height:66px}.person.me .body{width:92px;height:84px;background:linear-gradient(180deg,#2c5a52,#183630)}
+.person.me::after{content:"you · visible";position:absolute;top:-30px;font:500 10.5px/1 "JetBrains Mono",monospace;color:var(--mint);padding:5px 8px;border-radius:6px;background:rgba(140,230,209,.1);border:1px solid rgba(140,230,209,.3);white-space:nowrap}
+.bracket{position:absolute;inset:-10px -12px auto;height:86px;border:1.5px solid var(--mint);border-radius:14px;clip-path:polygon(0 0,22% 0,22% 2px,78% 2px,78% 0,100% 0,100% 22%,calc(100% - 2px) 22%,calc(100% - 2px) 78%,100% 78%,100% 100%,78% 100%,78% calc(100% - 2px),22% calc(100% - 2px),22% 100%,0 100%,0 78%,2px 78%,2px 22%,0 22%);animation:lock 3s var(--ease) infinite}
+@keyframes lock{0%,100%{transform:scale(1.06);opacity:.55}40%,70%{transform:scale(1);opacity:1}}
+
+/* card 2: qr */
+.qr-wrap{position:absolute;inset:0;display:grid;place-items:center}
+.qr{width:150px;height:150px;padding:10px;border-radius:12px;background:#f3f6ff;display:grid;grid-template-columns:repeat(21,1fr);gap:0;box-shadow:0 20px 50px -20px rgba(0,0,0,.6)}
+.qr i{background:#0a0e18;transform:scale(0);transition:transform .5s var(--ease);transition-delay:var(--t)}
+.qr.on i.k{transform:scale(1)}
+.qr-blur{position:absolute;width:170px;height:170px;border-radius:14px;backdrop-filter:blur(0);-webkit-backdrop-filter:blur(0);background:rgba(169,201,255,0);transition:backdrop-filter 1s var(--ease),-webkit-backdrop-filter 1s var(--ease),background 1s}
+.qr-blur.on{backdrop-filter:blur(9px) saturate(120%);-webkit-backdrop-filter:blur(9px) saturate(120%);background:rgba(169,201,255,.08)}
+.scanline{position:absolute;left:12%;right:12%;height:2px;top:12%;background:linear-gradient(90deg,transparent,var(--mint),transparent);box-shadow:0 0 18px var(--mint);opacity:0}
+.scanline.go{animation:scan 1.4s var(--ease-in-out) forwards}
+@keyframes scan{0%{top:12%;opacity:0}15%{opacity:1}85%{opacity:1}100%{top:88%;opacity:0}}
+.badge{position:absolute;right:16px;top:16px;font:500 10.5px/1 "JetBrains Mono",monospace;padding:6px 9px;border-radius:6px;color:var(--rose);background:rgba(255,143,163,.1);border:1px solid rgba(255,143,163,.3);opacity:0;transform:translateY(-6px);transition:all .6s var(--ease)}
+.badge.on{opacity:1;transform:none}
+
+/* card 3: phone digits */
+.phone{position:absolute;left:50%;top:22px;width:196px;height:240px;margin-left:-98px;overflow:hidden;border-radius:26px;background:linear-gradient(180deg,#1b2336,#111726);border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 60px -20px rgba(0,0,0,.7);padding:30px 14px}
+.phone::before{content:"";position:absolute;top:10px;left:50%;width:44px;height:6px;margin-left:-22px;border-radius:6px;background:rgba(255,255,255,.12)}
+.phone .contact{font-size:11px;color:var(--muted)}
+.phone .num{margin-top:8px;font:500 14px/1.2 "JetBrains Mono",monospace;color:#fff;white-space:nowrap}
+.phone .digits{position:relative;display:inline-block}
+.phone .num .caret{display:inline-block;width:2px;height:15px;background:var(--mint);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+.phone .mask{position:absolute;left:-6px;top:-5px;bottom:-5px;width:0;border-radius:7px;overflow:hidden;background:linear-gradient(90deg,rgba(140,230,209,.55),rgba(169,201,255,.55));backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);box-shadow:0 0 0 1px rgba(140,230,209,.6),0 0 18px rgba(140,230,209,.35);transition:width .9s var(--ease)}
+.phone .mask::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(5,7,13,.35) 0 7px,transparent 7px 14px),repeating-linear-gradient(0deg,rgba(5,7,13,.25) 0 7px,transparent 7px 14px)}
+.phone .mask.on{width:calc(100% + 12px)}
+.phone .num:has(.mask.on) .caret{opacity:0}
+.phone .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:22px}
+.phone .keys i{height:24px;border-radius:7px;background:rgba(255,255,255,.06)}
+
+/* ---------- flow (how it works) ---------- */
+.flow{display:grid;grid-template-columns:1fr 1fr;gap:80px;margin-top:70px;align-items:start}
+@media (max-width:960px){.flow{grid-template-columns:1fr;gap:40px}}
+.steps{position:relative;padding-left:44px}
+.steps::before{content:"";position:absolute;left:11px;top:6px;bottom:6px;width:1px;background:var(--line-2)}
+.progress{position:absolute;left:11px;top:6px;width:1px;height:0;background:var(--grad);box-shadow:0 0 12px var(--mint);transition:height .2s linear}
+.step{position:relative;padding:6px 0 64px;opacity:.35;transition:opacity .7s var(--ease)}
+.step:last-child{padding-bottom:6px}
+.step.on{opacity:1}
+.step .num{position:absolute;left:-44px;top:6px;width:23px;height:23px;border-radius:50%;display:grid;place-items:center;font:600 11px/1 "JetBrains Mono",monospace;color:var(--muted);background:var(--ink);border:1px solid var(--line-2);transition:all .6s var(--ease)}
+.step.on .num{color:#04110d;background:var(--mint);border-color:var(--mint);box-shadow:0 0 0 6px rgba(140,230,209,.12)}
+.step h4{font-size:26px;letter-spacing:-.03em;font-weight:600}
+.step p{margin-top:10px;color:var(--muted);max-width:440px}
+.step code{font:500 13px "JetBrains Mono",monospace;color:var(--sky);background:rgba(169,201,255,.08);padding:2px 7px;border-radius:6px}
+.flow-vis{position:sticky;top:140px;border-radius:var(--radius);border:1px solid var(--line);background:linear-gradient(180deg,rgba(18,24,38,.8),rgba(10,14,24,.8));padding:28px;min-height:420px;overflow:hidden}
+.panel-step{position:absolute;inset:28px;opacity:0;transform:translateY(16px) scale(.98);transition:opacity .7s var(--ease),transform .9s var(--ease);pointer-events:none}
+.panel-step.on{opacity:1;transform:none}
+.win{border-radius:14px;border:1px solid var(--line-2);background:rgba(5,7,13,.6);overflow:hidden}
+.win-bar{display:flex;gap:6px;padding:11px 12px;border-bottom:1px solid var(--line)}
+.win-bar i{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.14)}
+.win-body{padding:22px}
+.install-bar{height:8px;border-radius:8px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:14px}
+.install-bar i{display:block;height:100%;width:0;background:var(--grad);border-radius:inherit}
+.panel-step.on .install-bar i{animation:fill 2.6s var(--ease) forwards}
+@keyframes fill{to{width:100%}}
+.log{margin-top:18px;font:400 12.5px/1.9 "JetBrains Mono",monospace;color:var(--muted)}
+.log b{color:var(--mint);font-weight:500}
+.log div{opacity:0;transform:translateX(-8px);transition:all .5s var(--ease)}
+.panel-step.on .log div{opacity:1;transform:none}
+.people{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.pcard{border-radius:12px;border:1px solid var(--line);padding:12px;background:rgba(255,255,255,.02);text-align:center;font-size:12px;color:var(--muted);transition:all .6s var(--ease)}
+.pcard .av{width:54px;height:54px;margin:4px auto 10px;border-radius:50%;background:linear-gradient(160deg,#e8c3a5,#b98a6d)}
+.pcard.keep{border-color:rgba(140,230,209,.45);background:rgba(140,230,209,.06);color:var(--mint)}
+.toggles{display:grid;gap:12px;margin-top:18px}
+.toggle{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;border-radius:12px;border:1px solid var(--line);font-size:14px}
+.sw{width:38px;height:22px;border-radius:22px;background:rgba(140,230,209,.9);position:relative}
+.sw::after{content:"";position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#04110d}
+.meter{display:flex;align-items:flex-end;gap:5px;height:90px;margin-top:20px}
+.meter i{flex:1;border-radius:3px 3px 0 0;background:linear-gradient(180deg,var(--mint),rgba(140,230,209,.15));height:30%;animation:eq 1.6s var(--ease-in-out) infinite alternate;animation-delay:calc(var(--i) * -.17s)}
+@keyframes eq{to{height:100%}}
+
+/* ---------- numbers ---------- */
+.numbers{display:grid;grid-template-columns:repeat(4,1fr);margin-top:70px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:rgba(10,14,24,.5)}
+@media (max-width:860px){.numbers{grid-template-columns:repeat(2,1fr)}}
+.numbers>div{padding:38px 30px;border-right:1px solid var(--line)}
+.numbers>div:last-child{border-right:0}
+@media (max-width:860px){.numbers>div:nth-child(2){border-right:0}.numbers>div:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+.numbers strong{display:block;font-size:clamp(40px,4.6vw,64px);line-height:1;font-weight:600;letter-spacing:-.05em}
+.numbers>div>span{display:block;margin-top:12px;color:var(--muted);font-size:14px}
+
+/* ---------- privacy ---------- */
+.privacy{margin-top:150px;position:relative;border-radius:32px;padding:clamp(40px,7vw,96px);border:1px solid var(--line);overflow:hidden;background:radial-gradient(90% 120% at 100% 0%,rgba(140,230,209,.12),transparent 55%),radial-gradient(80% 100% at 0% 100%,rgba(183,166,255,.12),transparent 55%),rgba(10,14,24,.6)}
+.privacy-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:60px;align-items:center}
+@media (max-width:900px){.privacy-grid{grid-template-columns:1fr}}
+.privacy h2{font-size:clamp(40px,5.4vw,74px);line-height:1;letter-spacing:-.04em;font-weight:600}
+.privacy h2 .serif{font-style:italic;font-weight:400}
+.privacy p{margin-top:22px;color:var(--muted);font-size:18px;max-width:520px}
+.privacy ul{list-style:none;margin-top:30px;display:grid;gap:14px}
+.privacy li{display:flex;gap:12px;align-items:flex-start;color:#cdd5e6}
+.privacy li::before{content:"";flex:none;width:18px;height:18px;margin-top:3px;border-radius:50%;background:rgba(140,230,209,.15) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238ce6d1' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center/11px no-repeat}
+.shield{width:100%;max-width:360px;margin-inline:auto}
+.shield path,.shield circle,.shield rect{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.shield .draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);transition:stroke-dashoffset 2.6s var(--ease);transition-delay:var(--d,0s)}
+.shield.in .draw{stroke-dashoffset:0}
+.orbit{transform-origin:180px 180px;animation:orbit 18s linear infinite}
+.orbit.rev{animation-duration:26s;animation-direction:reverse}
+@keyframes orbit{to{transform:rotate(360deg)}}
+
+/* ---------- download ---------- */
+.download{margin-top:150px;text-align:center}
+.download h2{font-size:clamp(48px,8vw,120px);line-height:.95;letter-spacing:-.05em;font-weight:600}
+.download h2 .serif{font-style:italic;font-weight:400}
+.platforms{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:880px;margin:60px auto 0;text-align:left}
+@media (max-width:760px){.platforms{grid-template-columns:1fr}}
+.platform{position:relative;padding:30px;border-radius:var(--radius);border:1px solid var(--line);background:linear-gradient(180deg,rgba(18,24,38,.75),rgba(10,14,24,.75));overflow:hidden;transition:border-color .5s,transform .8s var(--ease)}
+.platform:hover{border-color:var(--line-2);transform:translateY(-4px)}
+.platform.detected{border-color:rgba(140,230,209,.45);box-shadow:0 30px 80px -40px rgba(140,230,209,.45)}
+.platform.detected::after{content:"Your system";position:absolute;top:22px;right:22px;font:500 11px/1 "JetBrains Mono",monospace;color:var(--mint);padding:6px 9px;border-radius:999px;background:rgba(140,230,209,.1);border:1px solid rgba(140,230,209,.3)}
+.platform .os{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:600;letter-spacing:-.02em}
+.platform .os svg{width:28px;height:28px}
+.platform ul{list-style:none;margin:18px 0 26px;display:grid;gap:8px;color:var(--muted);font-size:14.5px}
+.platform li::before{content:"—";color:var(--dim);margin-right:8px}
+.platform .btn{width:100%;justify-content:center}
+.platform .meta{margin-top:12px;font:400 12px/1.5 "JetBrains Mono",monospace;color:var(--dim)}
+
+/* ---------- faq ---------- */
+.faq{max-width:860px;margin:60px auto 0}
+.faq details{border-bottom:1px solid var(--line)}
+.faq summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:20px;padding:26px 4px;font-size:19px;font-weight:500;letter-spacing:-.02em}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary i{flex:none;position:relative;width:16px;height:16px}
+.faq summary i::before,.faq summary i::after{content:"";position:absolute;left:0;top:7.5px;width:16px;height:1.5px;background:var(--muted);transition:transform .6s var(--ease)}
+.faq summary i::after{transform:rotate(90deg)}
+.faq details[open] summary i::after{transform:rotate(0)}
+.faq .ans{overflow:hidden;color:var(--muted);transition:height .6s var(--ease)}
+.faq .ans>div{padding:0 4px 26px;max-width:700px}
+.faq .ans a{color:var(--sky)}
+
+/* ---------- footer ---------- */
+footer{margin-top:140px;border-top:1px solid var(--line);padding:46px 0 56px;color:var(--muted);font-size:14px;overflow:hidden}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.foot a{color:#b9c3d6;transition:color .3s}.foot a:hover{color:var(--text)}
+.foot nav{display:flex;gap:24px}
+.giant{margin-top:56px;font-size:clamp(72px,17vw,250px);line-height:.85;letter-spacing:-.06em;font-weight:700;text-align:center;white-space:nowrap;background:linear-gradient(180deg,rgba(214,228,255,.55),rgba(140,230,209,.22) 55%,rgba(169,201,255,0) 95%);-webkit-background-clip:text;background-clip:text;color:transparent;user-select:none}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+  .reveal,.line-mask>span{opacity:1;transform:none;filter:none}
+  .device{transform:none}
+}
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="grid-bg" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="cursor-glow" aria-hidden="true"></div>
+
+<header class="nav" id="nav">
+  <a class="brand" href="#top" aria-label="Offleak home"><img src="/assets/logo.svg" alt="">Offleak</a>
+  <nav class="nav-links" aria-label="Sections"><a href="#protects">What it hides</a><a href="#how">How it works</a><a href="#privacy">Privacy</a><a href="#faq">FAQ</a></nav>
+  <a class="btn" href="#download" data-magnetic>Download</a>
+</header>
+
+<main id="top">
+  <section class="hero wrap">
+    <div class="reveal" style="--d:.05s"><span class="eyebrow"><b><span class="pulse"></span>v0.1</b>Real-time privacy filter for IRL streams</span></div>
+    <h1 aria-label="Live on. Leak off.">
+      <span class="line-mask" data-reveal><span style="--d:.12s">Live on.</span></span>
+      <span class="line-mask" data-reveal><span style="--d:.24s"><span class="serif grad-text">Leak off.</span></span></span>
+    </h1>
+    <p class="lead reveal" style="--d:.45s">Offleak blurs <em>bystanders' faces</em>, <em>QR codes</em> and <em>phone numbers</em> in your OBS stream as it happens, on your own computer. You stay in the picture. Everyone else stays private.</p>
+    <div class="cta reveal" style="--d:.6s">
+      <div class="cta-row">
+        <a class="btn btn-primary" id="hero-download" href="#download" data-magnetic><span id="hero-download-label">Download free</span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14m-6-6 6 6 6-6"/></svg></a>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+      <small id="hero-alt">Free and open source &middot; macOS &amp; Windows &middot; <a href="#download">All downloads</a></small>
+    </div>
+
+    <div class="stage">
+      <div class="stage-glow"></div>
+      <div class="device" id="device">
+        <div class="screen" id="screen" role="img" aria-label="Animated demo: a street stream where the streamer stays visible while bystanders, a QR code and a phone number are pixelated. Drag to compare original and protected output.">
+          <canvas id="demo"></canvas>
+          <div class="handle" id="handle"></div>
+          <span class="side-label l" id="lbl-l">Camera</span>
+          <span class="side-label r" id="lbl-r">On stream</span>
+          <div class="hud">
+            <div class="hud-row">
+              <span class="chip live"><i></i>LIVE <span id="clock">01:24:07</span></span>
+              <span class="chip"><span class="stat-mint">●</span> Offleak · protecting</span>
+            </div>
+            <div class="hud-row">
+              <span class="chip"><span id="fps">60</span> fps · Δ 1.5 s</span>
+              <span class="chip" id="found">3 faces · 1 QR · 1 number</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stage-caption">
+        <span><i class="dot" style="background:var(--mint)"></i>Kept visible</span>
+        <span><i class="dot" style="background:var(--rose)"></i>Bystander blurred</span>
+        <span><i class="dot" style="background:var(--sky)"></i>QR code &amp; number masked</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track"><span>Built for OBS Studio</span><span>Twitch</span><span>YouTube Live</span><span>Kick</span><span>TikTok Live</span><span>Apple Silicon</span><span>NVIDIA</span><span>AMD</span><span>Intel</span><span>Runs 100% offline</span><span>Open source</span>
+      <span>Built for OBS Studio</span><span>Twitch</span><span>YouTube Live</span><span>Kick</span><span>TikTok Live</span><span>Apple Silicon</span><span>NVIDIA</span><span>AMD</span><span>Intel</span><span>Runs 100% offline</span><span>Open source</span></div>
+  </div>
+
+  <section class="sec wrap" id="protects">
+    <div class="sec-head">
+      <span class="kicker reveal">What it hides</span>
+      <h2><span class="line-mask" data-reveal><span>Three leaks.</span></span><span class="line-mask" data-reveal><span style="--d:.1s"><span class="serif grad-text">Caught live.</span></span></span></h2>
+      <p class="sub reveal" style="--d:.2s">IRL streams show strangers, posters and screens. Offleak watches every frame and blurs what could identify or reach someone, before your viewers see it.</p>
+    </div>
+    <div class="cards">
+      <article class="card reveal" data-spot style="--d:.05s">
+        <div class="vis" id="vis-faces"><div class="faces">
+          <div class="person" data-blur><div class="mosaic"></div><div class="head"></div><div class="body"></div></div>
+          <div class="person me"><span class="bracket"></span><div class="head"></div><div class="body"></div></div>
+          <div class="person" data-blur><div class="mosaic"></div><div class="head" style="background:linear-gradient(180deg,#a87a5c,#7d5843)"></div><div class="body" style="background:linear-gradient(180deg,#4a3355,#2a1d31)"></div></div>
+        </div></div>
+        <h3>Bystanders, blurred. <span class="serif grad-text">You, untouched.</span></h3>
+        <p>Pick the people who stay visible. Everyone else is blurred head to hair, even in profile, from behind, or upside down when you flip your phone.</p>
+        <div class="tag"><span>face recognition</span><span>head tracking</span><span>any angle</span></div>
+      </article>
+      <article class="card reveal" data-spot style="--d:.15s">
+        <div class="vis" id="vis-qr"><div class="qr-wrap"><div class="qr" id="qr"></div><div class="qr-blur" id="qr-blur"></div></div><div class="scanline" id="scan"></div><span class="badge" id="qr-badge">QR · masked</span></div>
+        <h3>QR codes <span class="serif grad-text">never reach chat.</span></h3>
+        <p>Printed posters, tickets and codes on someone's phone screen are found and masked, including tiny ones in the corner of the frame.</p>
+        <div class="tag"><span>printed &amp; on-screen</span><span>small codes</span></div>
+      </article>
+      <article class="card reveal" data-spot style="--d:.25s">
+        <div class="vis"><div class="phone"><div class="contact">Contact · Mobile</div><div class="num"><span class="digits"><span id="digits"></span><span class="mask" id="digits-mask"></span></span><span class="caret"></span></div><div class="keys"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+        <h3>Phone numbers, <span class="serif grad-text">mid-frame.</span></h3>
+        <p>Screens and paper are read the moment they appear. Only the digits are masked, so the rest of your shot stays clean. Mirrored selfie text too.</p>
+        <div class="tag"><span>on-device OCR</span><span>any format</span><span>mirrored text</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="sec wrap" id="how">
+    <div class="sec-head">
+      <span class="kicker reveal">How it works</span>
+      <h2><span class="line-mask" data-reveal><span>Set up once.</span></span><span class="line-mask" data-reveal><span style="--d:.1s"><span class="serif grad-text">Stream forever.</span></span></span></h2>
+    </div>
+    <div class="flow">
+      <div class="steps" id="steps">
+        <div class="progress" id="progress"></div>
+        <div class="step" data-step="0"><span class="num">1</span><h4>Install in one click</h4><p>The installer sets up everything, adds the Offleak filter to OBS, and picks the fastest hardware it finds: your NVIDIA GPU, Apple Silicon, or DirectML on AMD and Intel.</p></div>
+        <div class="step" data-step="1"><span class="num">2</span><h4>Choose who stays visible</h4><p>Snap the people in front of your webcam or drop in a photo. Group photos are split into one card per person. Toggle faces, QR codes and phone numbers independently.</p></div>
+        <div class="step" data-step="2"><span class="num">3</span><h4>Go live, protected</h4><p>Add <code>Offleak filter</code> to your camera in OBS. A short safety buffer lets Offleak see a moment ahead, and if it is ever unsure, it blurs the whole frame instead of guessing.</p></div>
+      </div>
+      <div class="flow-vis" aria-hidden="true">
+        <div class="panel-step" data-panel="0"><div class="win"><div class="win-bar"><i></i><i></i><i></i></div><div class="win-body">
+          <div style="font-weight:600;font-size:18px;letter-spacing:-.02em">Installing Offleak</div>
+          <div class="install-bar"><i></i></div>
+          <div class="log"><div style="transition-delay:.2s"><b>✓</b> OBS Studio detected</div><div style="transition-delay:.6s"><b>✓</b> GPU: NVIDIA GeForce · CUDA</div><div style="transition-delay:1s"><b>✓</b> Detector models ready</div><div style="transition-delay:1.4s"><b>✓</b> Offleak filter added to OBS</div><div style="transition-delay:1.9s"><b>✓</b> Ready to stream</div></div>
+        </div></div></div>
+        <div class="panel-step" data-panel="1"><div class="win"><div class="win-bar"><i></i><i></i><i></i></div><div class="win-body">
+          <div style="font-weight:600;font-size:18px;letter-spacing:-.02em">People kept visible</div>
+          <div class="people"><div class="pcard keep"><div class="av"></div>You</div><div class="pcard keep"><div class="av" style="background:linear-gradient(160deg,#c9a084,#8a6450)"></div>Co-host</div><div class="pcard"><div class="av" style="background:rgba(255,255,255,.06)"></div>+ Add</div></div>
+          <div class="toggles"><div class="toggle">Faces<span class="sw"></span></div><div class="toggle">QR codes<span class="sw"></span></div><div class="toggle">Phone numbers<span class="sw"></span></div></div>
+        </div></div></div>
+        <div class="panel-step" data-panel="2"><div class="win"><div class="win-bar"><i></i><i></i><i></i></div><div class="win-body">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:18px;letter-spacing:-.02em">Live</span><span class="chip live" style="font:500 12px 'JetBrains Mono',monospace"><i></i>ON AIR</span></div>
+          <div class="meter"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i style="--i:4"></i><i style="--i:5"></i><i style="--i:6"></i><i style="--i:7"></i><i style="--i:8"></i><i style="--i:9"></i><i style="--i:10"></i><i style="--i:11"></i><i style="--i:12"></i><i style="--i:13"></i></div>
+          <div class="log" style="margin-top:16px"><div><b>60</b> fps out · <b>0</b> dropped</div><div>Safety buffer <b>1.5 s</b> · steady</div><div>Faces · QR · numbers <b>protected</b></div></div>
+        </div></div></div>
+      </div>
+    </div>
+
+    <div class="numbers reveal">
+      <div><strong class="grad-text" data-count="60">0</strong><span>fps maximum output, every frame blurred before it airs</span></div>
+      <div><strong class="grad-text"><span data-count="0">0</span> bytes</strong><span>of video leave your computer</span></div>
+      <div><strong class="grad-text"><span data-count="1.5" data-dec="1">0</span> s</strong><span>default safety buffer, adjustable</span></div>
+      <div><strong class="grad-text" data-count="3">0</strong><span>kinds of leak blocked at once</span></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="privacy">
+    <div class="privacy reveal">
+      <div class="privacy-grid">
+        <div>
+          <span class="kicker">Privacy</span>
+          <h2 style="margin-top:22px"><span class="line-mask" data-reveal><span>Nothing leaves</span></span><span class="line-mask" data-reveal><span style="--d:.1s"><span class="serif grad-text">your machine.</span></span></span></h2>
+          <p>A privacy tool should not create a new leak. Offleak runs entirely on your computer, with no account, no cloud and no upload.</p>
+          <ul>
+            <li>Video, face photos and detections stay on your device</li>
+            <li>Works offline once installed</li>
+            <li>Open source under AGPL-3.0, so anyone can check it</li>
+          </ul>
+        </div>
+        <svg class="shield" id="shield" viewBox="0 0 360 360" aria-hidden="true">
+          <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8ce6d1"/><stop offset=".5" stop-color="#a9c9ff"/><stop offset="1" stop-color="#b7a6ff"/></linearGradient></defs>
+          <g class="orbit"><circle cx="180" cy="180" r="160" stroke="rgba(169,201,255,.14)" stroke-dasharray="2 10"/><circle cx="340" cy="180" r="4" fill="#8ce6d1" stroke="none" style="fill:#8ce6d1"/></g>
+          <g class="orbit rev"><circle cx="180" cy="180" r="128" stroke="rgba(140,230,209,.14)" stroke-dasharray="1 7"/><circle cx="52" cy="180" r="3" style="fill:#a9c9ff" stroke="none"/></g>
+          <path class="draw" style="--len:620" d="M180 62 270 96v74c0 62-38 108-90 128-52-20-90-66-90-128V96Z" stroke="url(#g1)" stroke-width="3"/>
+          <rect class="draw" style="--len:260;--d:.5s" x="140" y="168" width="80" height="62" rx="12" stroke="#eef2fb" stroke-width="3"/>
+          <path class="draw" style="--len:140;--d:.8s" d="M154 168v-18a26 26 0 0 1 52 0v18" stroke="#eef2fb" stroke-width="3"/>
+          <circle class="draw" style="--len:40;--d:1.2s" cx="180" cy="195" r="6" stroke="#8ce6d1" stroke-width="3"/>
+          <path class="draw" style="--len:30;--d:1.4s" d="M180 201v12" stroke="#8ce6d1" stroke-width="3"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="download wrap" id="download">
+    <span class="kicker reveal">Download</span>
+    <h2 style="margin-top:24px"><span class="line-mask" data-reveal><span>Stream boldly.</span></span><span class="line-mask" data-reveal><span style="--d:.1s"><span class="serif grad-text">Stay private.</span></span></span></h2>
+    <div class="platforms">
+      <div class="platform reveal" id="pf-mac" data-spot style="--d:.05s">
+        <div class="os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3-.79a4.45 4.45 0 0 0-3.76 2.28c-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.37-3.69ZM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.68-1.1 1.77-.96 2.81 1.02.08 2.06-.52 2.69-1.29Z"/></svg>macOS</div>
+        <ul><li>Apple Silicon (M1 or newer)</li><li>OBS Studio 33</li><li>Up to 60 fps on Apple's GPU &amp; Neural Engine</li></ul>
+        <a class="btn" href="/downloads/Offleak-0.1.0.dmg" download>Download for Mac<svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14m-6-6 6 6 6-6"/></svg></a>
+        <div class="meta">Offleak-0.1.0.dmg · first open: right-click › Open</div>
+      </div>
+      <div class="platform reveal" id="pf-win" data-spot style="--d:.15s">
+        <div class="os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.1 10.4 4v7.1H3V5.1Zm0 13.8 7.4 1.1v-7H3v5.9ZM11.3 3.9 21 2.5v8.6h-9.7V3.9Zm0 16.2 9.7 1.4v-8.4h-9.7v7Z"/></svg>Windows</div>
+        <ul><li>Windows 10 or 11, 64-bit</li><li>OBS Studio 33</li><li>Up to 60 fps · NVIDIA CUDA, or DirectML on AMD &amp; Intel</li></ul>
+        <a class="btn" href="/downloads/Offleak-Setup-0.1.0.exe" download>Download for Windows<svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14m-6-6 6 6 6-6"/></svg></a>
+        <div class="meta">Offleak-Setup-0.1.0.exe · SmartScreen: More info › Run anyway</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="faq">
+    <div class="faq">
+      <details><summary>Is Offleak really free?<i></i></summary><div class="ans"><div>Yes. Offleak is free and open source under the AGPL-3.0 licence. There is no account, subscription or upload. The installers include the full source code.</div></div></details>
+      <details><summary>Does my video go to a server?<i></i></summary><div class="ans"><div>No. Detection, face matching and blurring all run on your own computer. After installation Offleak works offline. The optional Twitch connection only reads your live status and moderator alerts. It never sends video.</div></div></details>
+      <details><summary>Which graphics card do I need?<i></i></summary><div class="ans"><div>On a Mac, any Apple Silicon chip. On Windows, an NVIDIA GPU gives the best speed through CUDA. AMD and Intel GPUs accelerate text reading through DirectML, and Offleak still runs on the CPU without a GPU.</div></div></details>
+      <details><summary>Can it stream at 60 fps?<i></i></summary><div class="ans"><div>Yes. Choose any frame rate from 5 to 60 fps in Offleak's settings. Every output frame is blurred: the detectors run as often as your computer allows, and motion tracking carries each blur onto the frames in between. 60 fps needs a recent GPU or Apple Silicon. If your computer cannot keep up, Offleak drops frames instead of letting the delay grow, so pick a lower rate on older machines.</div></div></details>
+      <details><summary>Why does my computer warn me when I open it?<i></i></summary><div class="ans"><div>Early releases are not yet signed with paid Apple and Microsoft certificates. On macOS, right-click the installer and choose Open. On Windows, choose More info, then Run anyway.</div></div></details>
+      <details><summary>Will it catch everything?<i></i></summary><div class="ans"><div>No detector is perfect, and Offleak is still early software. It is built to fail safe: if it loses track, it blurs the whole frame rather than guess. Test with dummy information, check your output before going live, and keep a stream delay. Audio is not filtered.</div></div></details>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <a class="brand" href="#top"><img src="/assets/logo.svg" alt="">Offleak</a>
+      <nav><a href="https://github.com/azharizz/offleak">Source code</a><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a><a href="#download">Download</a></nav>
+      <span>&copy; 2026 Offleak</span>
+    </div>
+    <div class="giant" aria-hidden="true">Offleak</div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  /* reveal on scroll */
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), {threshold: .15, rootMargin: '0px 0px -6% 0px'});
+  $$('.reveal,[data-reveal],.device,.shield').forEach(el => io.observe(el));
+
+  /* nav state */
+  const nav = $('#nav');
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 30), {passive: true});
+
+  /* cursor glow + magnetic buttons + card spotlight */
+  const glow = $('.cursor-glow');
+  if (!reduce && matchMedia('(pointer:fine)').matches) {
+    addEventListener('pointermove', e => { glow.style.transform = `translate3d(${e.clientX}px,${e.clientY}px,0)`; }, {passive: true});
+    $$('[data-magnetic]').forEach(b => {
+      b.addEventListener('pointermove', e => { const r = b.getBoundingClientRect(); b.style.transform = `translate(${(e.clientX - r.left - r.width / 2) * .22}px,${(e.clientY - r.top - r.height / 2) * .3}px)`; });
+      b.addEventListener('pointerleave', () => { b.style.transform = ''; });
+    });
+  } else glow.style.display = 'none';
+  $$('[data-spot]').forEach(c => c.addEventListener('pointermove', e => { const r = c.getBoundingClientRect(); c.style.setProperty('--mx', `${e.clientX - r.left}px`); c.style.setProperty('--my', `${e.clientY - r.top}px`); }));
+
+  /* OS detection */
+  const ua = navigator.userAgent, plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+  const os = /Win/i.test(plat) || /Windows/i.test(ua) ? 'win' : /Mac/i.test(plat) || /Mac OS X/i.test(ua) ? 'mac' : null;
+  const dl = {mac: ['/downloads/Offleak-0.1.0.dmg', 'Download for macOS'], win: ['/downloads/Offleak-Setup-0.1.0.exe', 'Download for Windows']};
+  if (os && !/iPhone|iPad|Android/i.test(ua)) {
+    $('#hero-download').href = dl[os][0];
+    $('#hero-download').setAttribute('download', '');
+    $('#hero-download-label').textContent = dl[os][1];
+    $('#hero-alt').innerHTML = `Free &amp; open source &middot; v0.1.0 &middot; <a href="${dl[os === 'mac' ? 'win' : 'mac'][0]}" download>Also for ${os === 'mac' ? 'Windows' : 'macOS'}</a>`;
+    $(os === 'mac' ? '#pf-mac' : '#pf-win').classList.add('detected');
+  }
+
+  /* counters */
+  const cio = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    cio.unobserve(e.target);
+    const el = e.target, to = parseFloat(el.dataset.count), dec = +(el.dataset.dec || 0), t0 = performance.now(), dur = 1800;
+    const tick = t => { const p = Math.min(1, (t - t0) / dur), v = to * (1 - Math.pow(1 - p, 4)); el.textContent = v.toFixed(dec); if (p < 1) requestAnimationFrame(tick); };
+    reduce ? (el.textContent = to.toFixed(dec)) : requestAnimationFrame(tick);
+  }), {threshold: .6});
+  $$('[data-count]').forEach(el => cio.observe(el));
+
+  /* FAQ: animate height */
+  $$('.faq details').forEach(d => {
+    const ans = $('.ans', d);
+    d.addEventListener('click', e => {
+      if (!e.target.closest('summary')) return;
+      e.preventDefault();
+      if (d.open) { ans.style.height = ans.scrollHeight + 'px'; requestAnimationFrame(() => { ans.style.height = '0px'; }); ans.addEventListener('transitionend', () => { d.open = false; ans.style.height = ''; }, {once: true}); }
+      else { d.open = true; const h = ans.scrollHeight; ans.style.height = '0px'; requestAnimationFrame(() => { ans.style.height = h + 'px'; }); ans.addEventListener('transitionend', () => { ans.style.height = ''; }, {once: true}); }
+    });
+  });
+
+  /* how-it-works: scroll progress + active step */
+  const steps = $$('.step'), panels = $$('.panel-step'), stepsEl = $('#steps'), bar = $('#progress');
+  const onScroll = () => {
+    const r = stepsEl.getBoundingClientRect(), mid = innerHeight * .55;
+    const p = Math.max(0, Math.min(1, (mid - r.top) / r.height));
+    bar.style.height = (p * (r.height - 12)) + 'px';
+    let active = 0;
+    steps.forEach((s, i) => { if (s.getBoundingClientRect().top < mid) active = i; });
+    steps.forEach((s, i) => s.classList.toggle('on', i <= active && p > 0));
+    panels.forEach((pn, i) => pn.classList.toggle('on', i === active));
+  };
+  addEventListener('scroll', onScroll, {passive: true}); onScroll();
+
+  /* card 1: mosaic faces */
+  $$('.person[data-blur] .mosaic').forEach(m => { for (let i = 0; i < 30; i++) { const c = document.createElement('i'); c.style.setProperty('--l', 35 + Math.random() * 40); c.style.setProperty('--h', 15 + Math.random() * 25); m.appendChild(c); } });
+  const blurPeople = $$('.person[data-blur]');
+  setInterval(() => blurPeople.forEach(p => p.classList.toggle('hidden')), reduce ? 999999 : 2600);
+  blurPeople.forEach(p => p.classList.add('hidden'));
+
+  /* card 2: QR assemble -> scan -> mask */
+  const qr = $('#qr'), finder = (r, c) => { const f = (a, b) => r >= a && r < a + 7 && c >= b && c < b + 7; const inF = f(0, 0) || f(0, 14) || f(14, 0); if (!inF) return null; const rr = r % 14 === r ? r : r - 14, cc = c % 14 === c ? c : c - 14; const x = Math.min(rr, 6 - rr), y = Math.min(cc, 6 - cc); return Math.min(x, y) !== 1; };
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  for (let r = 0; r < 21; r++) for (let c = 0; c < 21; c++) { const i = document.createElement('i'), f = finder(r, c), on = f === null ? rnd() > .5 : f; if (on) i.className = 'k'; i.style.setProperty('--t', `${(r + c) * 18}ms`); qr.appendChild(i); }
+  setTimeout(() => qr.classList.add('on'), 200);
+  const qrLoop = () => { $('#qr-blur').classList.remove('on'); $('#qr-badge').classList.remove('on'); $('#scan').classList.remove('go');
+    setTimeout(() => $('#scan').classList.add('go'), 900); setTimeout(() => { $('#qr-blur').classList.add('on'); $('#qr-badge').classList.add('on'); }, 2000); };
+  qrLoop(); if (!reduce) setInterval(qrLoop, 5200);
+
+  /* card 3: typing digits -> mask */
+  const digits = $('#digits'), mask = $('#digits-mask'), number = '+1 (929) 333-3622';
+  const typeLoop = () => { digits.textContent = ''; mask.classList.remove('on'); let i = 0;
+    const t = setInterval(() => { digits.textContent = number.slice(0, ++i); if (i >= number.length) { clearInterval(t); setTimeout(() => mask.classList.add('on'), 350); } }, 70); };
+  if (reduce) { digits.textContent = number; mask.classList.add('on'); } else { typeLoop(); setInterval(typeLoop, 5200); }
+
+  /* live clock + fps jitter */
+  let secs = 5047; const clock = $('#clock'), fps = $('#fps');
+  setInterval(() => { secs++; const h = String(secs / 3600 | 0).padStart(2, '0'), m = String((secs / 60 | 0) % 60).padStart(2, '0'), s = String(secs % 60).padStart(2, '0'); clock.textContent = `${h}:${m}:${s}`; fps.textContent = 60 - (Math.random() < .12 ? 1 : 0); }, 1000);
+
+  /* ---------- hero canvas: live street scene, original vs protected ---------- */
+  const screen = $('#screen'), canvas = $('#demo'), ctx = canvas.getContext('2d'), handle = $('#handle');
+  const W = 1280, H = 720, scene = document.createElement('canvas'), sctx = scene.getContext('2d'), tiny = document.createElement('canvas'), tctx = tiny.getContext('2d');
+  scene.width = W; scene.height = H;
+  let dpr = 1, split = .5, userSplit = false, visible = true;
+  const resize = () => { dpr = Math.min(devicePixelRatio || 1, 2); const r = screen.getBoundingClientRect(); canvas.width = r.width * dpr; canvas.height = r.height * dpr; };
+  addEventListener('resize', resize); resize();
+  new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(screen);
+  const setSplit = x => { const r = screen.getBoundingClientRect(); split = Math.max(.04, Math.min(.96, (x - r.left) / r.width)); userSplit = true; };
+  screen.addEventListener('pointerdown', e => { setSplit(e.clientX); screen.setPointerCapture(e.pointerId); });
+  screen.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'mouse') setSplit(e.clientX); });
+
+  // static backdrop: dusk sky, skyline with lit windows, street
+  const bg = document.createElement('canvas'); bg.width = W; bg.height = H; const b = bg.getContext('2d');
+  let g = b.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1b2a4a'); g.addColorStop(.45, '#3d3a63'); g.addColorStop(.62, '#a7677a'); g.addColorStop(.63, '#2a2f45'); g.addColorStop(1, '#141826');
+  b.fillStyle = g; b.fillRect(0, 0, W, H);
+  b.fillStyle = 'rgba(255,214,170,.18)'; b.beginPath(); b.arc(1040, 300, 120, 0, 7); b.fill();
+  b.filter = 'blur(2.5px)'; // shallow depth of field: the city is out of focus behind the streamer
+  let s2 = 3; const r2 = () => (s2 = (s2 * 9301 + 49297) % 233280) / 233280;
+  for (let x = -20; x < W; x += 70 + r2() * 60) {
+    const bw = 60 + r2() * 90, bh = 160 + r2() * 260, top = 455 - bh;
+    const bgG = b.createLinearGradient(0, top, 0, 455); bgG.addColorStop(0, '#232a44'); bgG.addColorStop(1, '#171c2e');
+    b.fillStyle = bgG; b.fillRect(x, top, bw, bh);
+    for (let wy = top + 14; wy < 440; wy += 22) for (let wx = x + 10; wx < x + bw - 12; wx += 18) if (r2() > .55) { b.fillStyle = r2() > .5 ? 'rgba(255,214,150,.55)' : 'rgba(169,201,255,.35)'; b.fillRect(wx, wy, 8, 11); }
+  }
+  g = b.createLinearGradient(0, 455, 0, H); g.addColorStop(0, '#2b3148'); g.addColorStop(1, '#10131e'); b.fillStyle = g; b.fillRect(0, 455, W, H - 455);
+  b.filter = 'none';
+  b.globalCompositeOperation = 'lighter'; // night bokeh
+  for (let i = 0; i < 34; i++) { const bx = r2() * W, by = 120 + r2() * 360, br = 10 + r2() * 34, warm = r2() > .45;
+    const bk = b.createRadialGradient(bx, by, 0, bx, by, br); bk.addColorStop(0, warm ? 'rgba(255,196,130,.30)' : 'rgba(140,200,255,.26)'); bk.addColorStop(.7, warm ? 'rgba(255,170,110,.10)' : 'rgba(120,180,255,.08)'); bk.addColorStop(1, 'rgba(0,0,0,0)');
+    b.fillStyle = bk; b.beginPath(); b.arc(bx, by, br, 0, 7); b.fill(); }
+  b.globalCompositeOperation = 'source-over';
+  b.strokeStyle = 'rgba(255,255,255,.06)'; b.lineWidth = 2; for (let i = -8; i < 9; i++) { b.beginPath(); b.moveTo(640 + i * 30, 455); b.lineTo(640 + i * 260, H); b.stroke(); }
+  // poster with QR on a wall
+  const posterX = 905, posterY = 210;
+  b.fillStyle = '#efe9df'; b.fillRect(posterX, posterY, 170, 230); b.fillStyle = '#e86a5a'; b.fillRect(posterX, posterY, 170, 50);
+  b.fillStyle = '#fff'; b.font = '700 22px Inter, sans-serif'; b.fillText('NIGHT MARKET', posterX + 12, posterY + 33);
+  const qx = posterX + 30, qy = posterY + 72, qs = 110, cell = qs / 21; let s3 = 11; const r3 = () => (s3 = (s3 * 9301 + 49297) % 233280) / 233280;
+  b.fillStyle = '#111'; for (let r = 0; r < 21; r++) for (let c = 0; c < 21; c++) { const f = finder(r, c); if (f === null ? r3() > .5 : f) b.fillRect(qx + c * cell, qy + r * cell, cell + .3, cell + .3); }
+  b.fillStyle = '#555'; b.font = '600 12px Inter, sans-serif'; b.fillText('SCAN FOR TICKETS', posterX + 34, posterY + 212);
+
+  const regions = { qr: {x: qx - 8, y: qy - 8, w: qs + 16, h: qs + 16} };
+  const people = [ // walking bystanders: depth scale, speed, colours
+    {x: -120, y: 470, s: .62, v: 58, skin: '#d9a98a', hair: '#2b1d16', top: '#6d4c8a'},
+    {x: 1400, y: 500, s: .8, v: -74, skin: '#9c6b4f', hair: '#120c0a', top: '#3c6fa3'},
+    {x: 300, y: 455, s: .5, v: 40, skin: '#f0c7a8', hair: '#a0662f', top: '#a34b4b'},
+  ];
+  const drawPerson = (c, p, t) => {
+    const s = p.s, bob = Math.sin(t * 6 + p.x * .02) * 3 * s, x = p.x, y = p.y + bob;
+    c.save(); c.translate(x, y); c.scale(s, s);
+    c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(0, 300, 70, 14, 0, 0, 7); c.fill();
+    c.fillStyle = p.top; c.beginPath(); c.roundRect(-62, 40, 124, 180, 46); c.fill();
+    c.fillStyle = '#1c2233'; c.fillRect(-46, 200, 38, 100); c.fillRect(8, 200, 38, 100);
+    c.fillStyle = p.skin; c.beginPath(); c.ellipse(0, -10, 40, 48, 0, 0, 7); c.fill();
+    c.fillStyle = p.hair; c.beginPath(); c.ellipse(0, -36, 42, 26, 0, Math.PI, 0); c.fill();
+    c.restore();
+    return {x: x - 46 * s, y: y - 66 * s, w: 92 * s, h: 104 * s};
+  };
+  const drawStreamer = (c, t) => {
+    const x = 470 + Math.sin(t * .7) * 14, y = 350 + Math.sin(t * 1.3) * 4;
+    c.save(); c.translate(x, y);
+    const body = c.createLinearGradient(0, 120, 0, 420); body.addColorStop(0, '#27504a'); body.addColorStop(1, '#122a26');
+    c.fillStyle = body; c.beginPath(); c.roundRect(-190, 150, 380, 330, 140); c.fill();
+    c.strokeStyle = 'rgba(140,230,209,.35)'; c.lineWidth = 3; c.beginPath(); c.roundRect(-190, 150, 380, 330, 140); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 4; c.beginPath(); c.moveTo(-30, 180); c.lineTo(-24, 260); c.moveTo(30, 180); c.lineTo(24, 260); c.stroke();
+    c.fillStyle = '#d7a184'; c.fillRect(-42, 90, 84, 80);
+    const face = c.createRadialGradient(-20, -10, 10, 0, 0, 150); face.addColorStop(0, '#f4c8a8'); face.addColorStop(1, '#c58c6d');
+    c.fillStyle = face; c.beginPath(); c.ellipse(0, 0, 104, 128, 0, 0, 7); c.fill();
+    c.save(); c.clip(); const shade = c.createLinearGradient(-110, 0, 110, 0); shade.addColorStop(0, 'rgba(60,20,40,.28)'); shade.addColorStop(.55, 'rgba(0,0,0,0)'); shade.addColorStop(1, 'rgba(140,230,209,.22)'); c.fillStyle = shade; c.fillRect(-110, -130, 220, 260); c.restore();
+    c.strokeStyle = 'rgba(160,240,220,.55)'; c.lineWidth = 3; c.shadowColor = '#8ce6d1'; c.shadowBlur = 18; c.beginPath(); c.ellipse(0, 0, 104, 128, 0, -1.2, .9); c.stroke(); c.shadowBlur = 0;
+    c.fillStyle = 'rgba(255,120,120,.16)'; c.beginPath(); c.ellipse(-52, 34, 20, 12, 0, 0, 7); c.ellipse(52, 34, 20, 12, 0, 0, 7); c.fill();
+    c.fillStyle = '#1b1411'; c.beginPath(); c.ellipse(0, -74, 112, 76, 0, Math.PI * 1.02, -.02); c.fill();
+    c.beginPath(); c.ellipse(-80, -40, 30, 60, .3, 0, 7); c.fill();
+    c.fillStyle = '#20150f'; const blink = (t % 4) < .12 ? .15 : 1;
+    c.beginPath(); c.ellipse(-38, 6, 11, 8 * blink, 0, 0, 7); c.ellipse(38, 6, 11, 8 * blink, 0, 0, 7); c.fill();
+    c.strokeStyle = '#8a4f43'; c.lineWidth = 6; c.lineCap = 'round'; c.beginPath(); c.arc(0, 48, 30, .25, Math.PI - .25); c.stroke();
+    c.restore();
+    return {x: x - 112, y: y - 150, w: 224, h: 290};
+  };
+  const drawPhone = (c, t) => { // a bystander's phone showing a number, raised into frame
+    const x = 140, y = 300 + Math.sin(t * 1.1) * 8;
+    c.save(); c.translate(x, y); c.rotate(-.08);
+    c.fillStyle = '#0d1018'; c.beginPath(); c.roundRect(0, 0, 150, 270, 24); c.fill();
+    c.fillStyle = '#eef2fb'; c.beginPath(); c.roundRect(8, 10, 134, 250, 18); c.fill();
+    c.fillStyle = '#5b6372'; c.font = '600 11px Inter, sans-serif'; c.fillText('Mobile', 22, 52);
+    c.fillStyle = '#0b0f18'; c.font = '600 15px "JetBrains Mono", monospace'; c.fillText('+1 929', 22, 78); c.fillText('333-3622', 22, 98);
+    c.fillStyle = '#d6dbe6'; for (let i = 0; i < 9; i++) c.fillRect(22 + (i % 3) * 38, 130 + (i / 3 | 0) * 36, 30, 26);
+    c.fillStyle = '#d4c3b5'; c.beginPath(); c.ellipse(70, 268, 60, 24, 0, 0, 7); c.fill();
+    c.restore();
+    return {x: x + 6, y: y + 52, w: 126, h: 64};
+  };
+  const pixelate = (c, src, r, cellSize) => {
+    const w = Math.max(1, r.w / cellSize | 0), h = Math.max(1, r.h / cellSize | 0);
+    tiny.width = w; tiny.height = h; tctx.imageSmoothingEnabled = true; tctx.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, w, h);
+    c.imageSmoothingEnabled = false; c.drawImage(tiny, 0, 0, w, h, r.x, r.y, r.w, r.h); c.imageSmoothingEnabled = true;
+  };
+  const bracket = (c, r, col, label, a) => {
+    if (a <= 0) return;
+    const k = 1 + (1 - a) * .25, cx = r.x + r.w / 2, cy = r.y + r.h / 2, w = r.w * k, h = r.h * k, x = cx - w / 2, y = cy - h / 2, L = Math.min(w, h) * .22;
+    c.save(); c.globalAlpha = a; c.strokeStyle = col; c.lineWidth = 3; c.shadowColor = col; c.shadowBlur = 14;
+    c.beginPath();
+    [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]].forEach(([px, py, dx, dy]) => { c.moveTo(px, py + dy * L); c.lineTo(px, py); c.lineTo(px + dx * L, py); });
+    c.stroke(); c.shadowBlur = 0;
+    c.font = '600 15px "JetBrains Mono", monospace'; const tw = c.measureText(label).width + 18;
+    c.fillStyle = 'rgba(5,7,13,.78)'; c.beginPath(); c.roundRect(x, y - 30, tw, 24, 6); c.fill();
+    c.fillStyle = col; c.fillText(label, x + 9, y - 13);
+    c.restore();
+  };
+
+  const seen = new Map([['qr', -1], ['phone', -1], ['me', -1]]); // region -> time detected (fixed objects: from the start)
+  const entered = new Map();
+  const t0 = performance.now();
+  const frame = now => {
+    requestAnimationFrame(frame);
+    if (!visible) return;
+    const t = (now - t0) / 1000, dt = 1 / 60;
+    // scene
+    sctx.drawImage(bg, 0, 0);
+    const boxes = [];
+    people.forEach((p, i) => { if (!reduce) { p.x += p.v * dt; if (p.v > 0 && p.x > W + 160) p.x = -160; if (p.v < 0 && p.x < -160) p.x = W + 160; } if (i !== 1) boxes.push(['p' + i, drawPerson(sctx, p, t)]); });
+    const streamer = drawStreamer(sctx, t);
+    boxes.push(['p1', drawPerson(sctx, people[1], t)]); // walks in front of the streamer
+    const phone = drawPhone(sctx, t);
+    // scan beam
+    const beam = ((t % 5) / 5) * (W + 400) - 200;
+    const detected = key => { if (!seen.has(key)) return 0; return Math.min(1, (t - seen.get(key)) / .5); };
+    const sweep = (key, r) => { if (!entered.has(key)) entered.set(key, t); if (!seen.has(key) && (beam > r.x || t - entered.get(key) > .7)) seen.set(key, t); };
+    boxes.forEach(([k, r]) => { if (r.x + r.w > 0 && r.x < W) sweep(k, r); else { seen.delete(k); entered.delete(k); } });
+    // composite: original on the left of the split, protected on the right
+    const cw = canvas.width, ch = canvas.height, sx = cw / W;
+    if (!userSplit && !reduce) split = .5 + Math.sin(t * .45) * .28;
+    ctx.save(); ctx.setTransform(sx, 0, 0, ch / H, 0, 0);
+    ctx.drawImage(scene, 0, 0);
+    const xSplit = split * W;
+    ctx.beginPath(); ctx.rect(xSplit, 0, W - xSplit, H); ctx.clip();
+    ctx.drawImage(scene, 0, 0);
+    boxes.forEach(([k, r]) => { if (detected(k) > 0) pixelate(ctx, scene, r, 11); });
+    if (detected('qr') > 0) pixelate(ctx, scene, regions.qr, 14);
+    if (detected('phone') > 0) pixelate(ctx, scene, phone, 9);
+    boxes.forEach(([k, r]) => bracket(ctx, r, '#ff8fa3', 'bystander', detected(k)));
+    bracket(ctx, regions.qr, '#a9c9ff', 'QR code', detected('qr'));
+    bracket(ctx, phone, '#a9c9ff', 'phone number', detected('phone'));
+    bracket(ctx, streamer, '#8ce6d1', 'you · visible', Math.max(.85, detected('me')));
+    ctx.restore();
+    // beam (protected side only)
+    if (beam > xSplit && beam < W) {
+      ctx.save(); ctx.setTransform(sx, 0, 0, ch / H, 0, 0);
+      const bgr = ctx.createLinearGradient(beam - 60, 0, beam + 4, 0); bgr.addColorStop(0, 'rgba(140,230,209,0)'); bgr.addColorStop(1, 'rgba(140,230,209,.35)');
+      ctx.fillStyle = bgr; ctx.fillRect(beam - 60, 0, 64, H); ctx.fillStyle = 'rgba(200,255,240,.9)'; ctx.fillRect(beam, 0, 2, H);
+      ctx.restore();
+    }
+    // colour grade: teal shadows, warm highlights
+    ctx.save(); ctx.globalCompositeOperation = 'soft-light'; const grade = ctx.createLinearGradient(0, 0, cw, ch); grade.addColorStop(0, 'rgba(60,140,170,.35)'); grade.addColorStop(1, 'rgba(255,170,120,.25)'); ctx.fillStyle = grade; ctx.fillRect(0, 0, cw, ch); ctx.restore();
+    // vignette
+    const v = ctx.createRadialGradient(cw / 2, ch / 2, ch * .3, cw / 2, ch / 2, cw * .7); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)'); ctx.fillStyle = v; ctx.fillRect(0, 0, cw, ch);
+    handle.style.left = (split * 100) + '%';
+    $('#lbl-l').style.opacity = split > .16 ? 1 : 0; $('#lbl-r').style.opacity = split < .84 ? 1 : 0;
+  };
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

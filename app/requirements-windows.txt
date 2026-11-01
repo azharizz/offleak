@@ -1,0 +1,12 @@
+# Windows runtime (installers/windows/setup.ps1 installs these into the app's private Python).
+# PyTorch comes first from download.pytorch.org: the CUDA build when an NVIDIA GPU is present, else the CPU build.
+Flask==3.1.2
+numpy==2.2.6
+ultralytics==8.4.102
+qrdet==2.5
+lap==0.5.13
+scipy==1.16.2
+Pillow==11.3.0
+websocket-client==1.8.0
+rapidocr-onnxruntime==1.4.4
+phonenumbers==9.0.42

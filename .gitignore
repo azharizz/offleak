@@ -168,3 +168,12 @@ playground/results/*
 
 # Local Rust experiment build artifacts
 playground/experiments/**/target/
+
+# Offleak app: local models, data, builds and venv
+app/.venv
+app/models/*
+!app/models/README.md
+app/data/
+app/.build/
+app/dist/
+app/.deepeval/
